@@ -127,8 +127,8 @@ export class Bike {
       // ←/→: rider tips the bike further over (balance handled by the steering), but only as far as the grip
       // allows: ~35° on flat ground, more on a berm that leans the same way
       // ←/→ tips the bike over a bit more, using only the lean margin the turn hasn't already used up
-      const margin = clamp(1 - Math.abs(this.leanT) / (0.62 + 0.4 * Math.max(0, Math.sign(this.leanT) * bank)), 0, 1);
-      const leanT = combo > 0 ? this.leanT : this.leanT + 0.28 * ip.lean * (Math.sign(ip.lean) === Math.sign(this.leanT) || Math.abs(this.leanT) < 0.05 ? margin : 1);
+      const margin = clamp(1 - Math.abs(this.leanT) / (0.85 + 0.5 * Math.max(0, Math.sign(this.leanT) * bank)), 0, 1);
+      const leanT = this.leanT + (combo > 0 ? 0.3 : 0.5) * ip.lean * (Math.sign(ip.lean) === Math.sign(this.leanT) || Math.abs(this.leanT) < 0.05 ? margin : 1);
       const a = MASS * h * vf * vf * Math.sin(G.HEAD_ANGLE) / G.WHEELBASE;
       const Kp = Math.min(5, (Ir * wn * wn + MASS * GRAV * h) / a), Kd = Math.min(1.2, 2 * zeta * wn * Ir / a);
       const ff = Math.atan(G.WHEELBASE * Math.tan(leanT) * GRAV / (vf * vf)) / Math.sin(G.HEAD_ANGLE);
