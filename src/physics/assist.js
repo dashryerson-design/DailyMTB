@@ -41,9 +41,11 @@ export class Assist {
       // at speed the steering balance already does the work: assist only for clearly unexplained lean;
       // below ~5 m/s (where steering can't balance) it becomes the main helper
       const slow = clamp((5 - v) / 4, 0, 1);
-      const err = deadband(lean - target, 0.06 + 0.14 * (1 - slow));
-      const k = A.upright * (700 * slow + 250), c = A.upright * (180 * slow + 30);
-      const tu = -(k * err + c * leanRate * (slow + (Math.abs(err) > 0 ? 0.5 : 0)));
+      const raw = lean - target, err = deadband(raw, 0.05 + 0.07 * (1 - slow));
+      // catch zone: firm help for anything recoverable, fading out only for a massive mistake (> ~60° off)
+      const save = 1 - clamp((Math.abs(raw) - 0.8) / 0.3, 0, 1);
+      const k = A.upright * save * (1100 * slow + 520), c = A.upright * save * (220 * slow + 70);
+      const tu = -(k * err + c * leanRate * (slow + (Math.abs(err) > 0 ? 0.6 : 0.15)));
       T = T.add(fh.mul(tu)); info.upright = tu;
 
       // -- surface angle: on a bank, keep the bike within ~25° of square to the riding surface and damp
