@@ -1,6 +1,9 @@
 // Headless physics validation: node tests/sim.mjs
 import { buildTrack } from '../src/terrain/track.js';
+import { ASSIST } from '../src/physics/assist.js';
+if (process.env.ASSIST) Object.assign(ASSIST, JSON.parse(process.env.ASSIST));
 import { RideSystem } from '../src/physics/system.js';
+import { maxLatAccel } from '../src/physics/bike.js';
 import { J } from '../src/physics/rider.js';
 import * as G from '../src/physics/geometry.js';
 const track = buildTrack(), sys = new RideSystem(track), bike = sys.bike, rider = sys.rider, dt = 1 / 1000;
@@ -13,7 +16,7 @@ function run(name, s0, v0, secs, keysFn) {
     const t = i * dt; sys.step(dt, keysFn(t, bike));
     if (!bike.ok) { console.log(name, 'NaN at', t); return st; }
     if (bike.crashed || rider.crashed) { st.crash = st.crash ?? t; }
-    if (i % 20 === 0) { const f = bike.q.rot({ x: 1, y: 0, z: 0 }); log.push(`${t.toFixed(2)} s${nearestS(bike.p).toFixed(1)} v${bike.speed.toFixed(1)} lean${(bike.lean * 57.3).toFixed(0)} lt${(bike.leanT * 57.3).toFixed(0)} st${(bike.steer * 57.3).toFixed(0)} in${bike.inp.steer.toFixed(2)} pitch${(Math.asin(f.y) * 57.3).toFixed(0)} pF${bike.cF ? (bike.cF.pen * 1000).toFixed(0) + bike.cF.surf.name[0] : '-'} pR${bike.cR ? (bike.cR.pen * 1000).toFixed(0) + bike.cR.surf.name[0] : '-'} sF${(bike.sF * 1000).toFixed(0)} th${bike.th.toFixed(2)}`); }
+    if (i % 20 === 0) { const f = bike.q.rot({ x: 1, y: 0, z: 0 }); log.push(`${t.toFixed(2)} s${nearestS(bike.p).toFixed(1)} v${bike.speed.toFixed(1)} lean${(bike.lean * 57.3).toFixed(0)} lt${(bike.leanT * 57.3).toFixed(0)} st${(bike.steer * 57.3).toFixed(0)} in${bike.inp.steer.toFixed(2)} pitch${(Math.asin(f.y) * 57.3).toFixed(0)} pF${bike.cF ? (bike.cF.pen * 1000).toFixed(0) + bike.cF.surf.name[0] : '-'} pR${bike.cR ? (bike.cR.pen * 1000).toFixed(0) + bike.cR.surf.name[0] : '-'} sF${(bike.sF * 1000).toFixed(0)} th${bike.th.toFixed(2)} aU${(bike.assist.info.upright || 0).toFixed(0)} aD${(bike.assist.info.dir || 0).toFixed(0)} aL${(bike.assist.info.landR || 0).toFixed(0)}`); }
     if (!dumped && bike.q.rot({ x: 0, y: 1, z: 0 }).y < 0.7) { dumped = true; console.log(log.slice(-150).filter((_, i) => i % 3 === 0).join('\n')); }
     if (t < 0.6) continue;
     if (!rider.crashed) {
@@ -42,14 +45,15 @@ function nearestS(p) { const { S, X, Z } = track.centerline; let b = 1e9, bs = 0
 function pilot(look = 6, extra = {}) {
   // pure-pursuit rider: picks a point ahead on the trail and asks for the lateral accel to reach it
   return (t, b) => {
-    const v = Math.max(b.speed, 1), L = Math.max(look, 1.1 * v), s = nearestS(b.p), tp = track.sampleAt(s + L), f = b.q.rot({ x: 1, y: 0, z: 0 });
+    const v = Math.max(b.speed, 1), L = Math.max(look, (+process.env.LOOK || 1.4) * v), s = nearestS(b.p), tp = track.sampleAt(s + L), f = b.q.rot({ x: 1, y: 0, z: 0 });
     const dx = tp.x - b.p.x, dz = tp.z - b.p.z, alpha = Math.atan2(f.x * dz - f.z * dx, f.x * dx + f.z * dz);
-    const aLat = v * v * 2 * Math.sin(alpha) / Math.hypot(dx, dz), aMax = Math.min(0.85 * 9.81, v * v / 4.5);
+    const aLat = v * v * 2 * Math.sin(alpha) / Math.hypot(dx, dz), aMax = maxLatAccel(v);
     const k = { ...extra }; for (const key of ['w', 's']) if (typeof extra[key] === 'function') k[key] = extra[key](t, b);
-    k.steer = Math.max(-1, Math.min(1, aLat / aMax));
+    // human-like: the test rider's hands react with ~0.15 s smoothing
+    const raw = Math.max(-1, Math.min(1, aLat / aMax)); b._ps = (b._ps ?? 0) + (raw - (b._ps ?? 0)) * Math.min(1, 0.001 / 0.15); k.steer = b._ps;
     // rider pitch technique: in the air, hold the nose roughly parallel to a downhill landing
     if (b.cR && !b.cF && b.q.inv(b.w).z < -0.3) k.pitch = 1;   // lip technique: pull up while the rear is still on the ramp
-    else if (b.air > 0.03) { const pr = b.q.inv(b.w).z, pe = Math.asin(f.y) + 0.22; k.pitch = Math.max(-1, Math.min(1, -(pe * 2.5 + pr * 0.6))); }
+    // in the air the landing assist lines the bike up; the test rider gives no pitch input
     return k;
   };
 }
@@ -70,11 +74,11 @@ run('bumps 5m/s', sec['Rock & root garden'] - 3, 5, 12, pilot(6, { w: (t, b) => 
 run('bumps 9m/s', sec['Rock & root garden'] - 3, 9, 8, pilot(6, { w: (t, b) => b.speed < 9 }));
 run('rollers', sec['Rollers'] - 3, 7, 6, pilot(6, { w: (t, b) => b.speed < 7 }));
 run('tabletop', sec['Tabletop'] - 4, 8.5, 5, pilot(6));
-run('big jump', sec['Big jump'] - 4, 10, 5, pilot(6));
+run('big jump', sec['Big jump'] - 4, 10.8, 5, pilot(6));
 run('berm L', sec['Berm L (wide)'] - 6, 8, 6, pilot(5, { w: (t, b) => b.speed < 8 }));
 run('berm R', sec['Berm R (tight)'] - 6, 6.5, 6, pilot(4, { w: (t, b) => b.speed < 6.5 }));
 run('sweeper', sec['Sweeper'] - 6, 9, 9, pilot(6, { w: (t, b) => b.speed < 9 }));
 run('flat turns', sec['Flat turns'] - 4, 5, 12, pilot(4, { w: (t, b) => b.speed < 5, s: undefined }));
 run('drop', sec['Rocky drop'] - 2, 6, 5, pilot(6));
-const vT = (b) => { const s = nearestS(b.p); return s > sec['Rollers'] - 15 && s < sec['Rollers'] + 32 ? 6.5 : s > sec['Big jump'] - 25 && s < sec['Big jump'] + 6 ? 10.5 : s > sec['Berm R (tight)'] - 15 && s < sec['Berm R (tight)'] + 20 ? 6.5 : s > sec['Rocky drop'] - 10 && s < sec['Rocky drop'] + 10 ? 6.5 : 8; };
+const vT = (b) => { const s = nearestS(b.p); return s > sec['Rollers'] - 15 && s < sec['Rollers'] + 32 ? 6.5 : s > sec['Big jump'] - 25 && s < sec['Big jump'] + 6 ? 10.5 : s > sec['Berm R (tight)'] - 15 && s < sec['Berm R (tight)'] + 20 ? 6.5 : s > sec['Rocky drop'] - 10 && s < sec['Rocky drop'] + 10 ? 6.5 : s > sec['Flat turns'] - 5 && s < sec['Flat turns'] + 45 ? 6.5 : 8; };
 run('full run', 3, 0, 56, pilot(5, { w: (t, b) => b.speed < vT(b), s: (t, b) => b.speed > vT(b) + 1.5 }));

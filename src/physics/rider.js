@@ -77,6 +77,7 @@ export class Rider {
     abs('kneeL', 'kneeR', 0.1, 0.9); abs('hipR', 'kneeL', 0.1, 0.62); abs('hipL', 'kneeR', 0.1, 0.62);
     this.C = C; this.attached = true; this.crashed = false; this.tone = 1; this.stand = 1; this.rough = 0; this.aF = new V(0, 0, 0);
     this.saddleLoad = 0; this.gripErr = 0; this.footErr = 0;
+    this.sup = 1; this.absorb = 0; this.wasOnGround = true; this.vyAir = 0; this.lip = 0; this.p0 = undefined;
   }
 
   // one physics step. Returns forces acting on the bike.
@@ -90,8 +91,14 @@ export class Rider {
     // impacts are left to the leg/arm compliance
     // gravity compensation: on the ground the legs carry the body weight; in free flight bike and rider
     // fall together so no support is needed (blended so take-off and landing stay smooth)
-    this.sup = clamp((this.sup ?? 1) + ((b.cF || b.cR) ? 1 : -1) * dt * 6, 0, 1);
-    const support = g.mul(-this.sup);
+    const onGround = !!(b.cF || b.cR);
+    // landing: on touchdown after real airtime the legs let go a little and soak up the hit, scaled by
+    // how fast we were coming down; the posture then recovers over ~0.5 s
+    if (onGround && !this.wasOnGround && b.air === 0 && (b.lastAir || 0) > 0.12) this.absorb = clamp(-this.vyAir / 3, 0.2, 1);
+    if (!onGround) this.vyAir = b.v.y;
+    this.wasOnGround = onGround; this.absorb = Math.max(0, (this.absorb || 0) - dt / 0.5);
+    this.sup = clamp((this.sup ?? 1) + (onGround ? 1 : -1) * dt * 6, 0, 1);
+    const support = g.mul(this.crashed ? 0 : -this.sup);
 
     // ---- posture controller (targets in BB frame)
     const ip = b.inp, spd = Math.max(0, b.speed || 0), air = b.air > 0.04;
@@ -103,7 +110,7 @@ export class Rider {
     const lip = (b.cR && !b.cF && b.w.dot(right) < -0.5) ? 1 : 0;   // front wheel has left the lip: instinctively get back
     this.lip = clamp((this.lip ?? 0) + (lip ? 8 : -3) * dt, 0, 1);
     const hipX = -0.23 - 0.1 * this.lip + 0.07 * this.stand - 0.12 * brake + 0.04 * ip.thr - 0.17 * ip.pitch + 0.45 * Math.sin(pitchAng) * this.stand * this.sup;
-    const hipY = 0.785 + 0.095 * this.stand + (air ? 0.03 : 0) - 0.06 * Math.min(1, this.rough);
+    const hipY = 0.785 + 0.095 * this.stand + (air ? 0.03 : 0) - 0.06 * Math.min(1, this.rough) - 0.12 * this.absorb;
     // keep the hips where both feet can still reach their pedals (legs bend, never over-stretch)
     let hipYr = hipY; const hx = clamp(hipX, -0.42, 0.02), reach = (SEG.thigh + SEG.shin) * 0.96;
     for (const s of [-1, 1]) { const pd = G.pedalAt(b.crank, s), ax = pd[0] - 0.04, ay = pd[1] + 0.075, dz = s * G.PEDAL_Z - s * SEG.hipW;
@@ -154,11 +161,12 @@ export class Rider {
       const e = hipT.sub(hipM), ev = this.velAt(b, hipT).sub(hipV);
       const eL = new V(e.dot(fwd), e.dot(up), e.dot(right)), evL = new V(ev.dot(fwd), ev.dot(up), ev.dot(right));
       const air2 = 0.35 + 0.65 * this.sup;   // airborne: body goes compliant fore/aft so it can act as the reaction mass
-      const fl = new V((2600 * eL.x + 420 * evL.x) * air2, (3200 * eL.y + 480 * evL.y) * air2, 20000 * eL.z + 1600 * evL.z);
+      const legK = 1 - 0.45 * this.absorb;   // softer legs right after touchdown
+      const fl = new V((2600 * eL.x + 420 * evL.x) * air2, (3200 * eL.y + 480 * evL.y) * air2 * legK, 20000 * eL.z + 1600 * evL.z);
       let fLeg = fwd.mul(fl.x).add(up.mul(fl.y)).add(right.mul(fl.z)).mul(tone).add(support.mul(M_UPPER * tone * (0.25 + 0.75 * this.stand))); // seated: saddle takes most of the weight
       const lim = 3200; if (fLeg.len() > lim) fLeg = fLeg.mul(lim / fLeg.len());
       madd(J.hipL, fLeg.mul(0.5)); madd(J.hipR, fLeg.mul(0.5));
-      if (this.attached) { madd(J.ankL, fLeg.mul(-0.5)); madd(J.ankR, fLeg.mul(-0.5)); }
+      madd(J.ankL, fLeg.mul(-0.5)); madd(J.ankR, fLeg.mul(-0.5));   // always reacted: muscles are internal
       // back + arms: chest relative to hips and hands
       const ec = neckT.sub(x[J.neck]), ecv = this.velAt(b, neckT).sub(v[J.neck]);
       const ecz = right.mul(ec.dot(right) * 4000 + ecv.dot(right) * 300);   // stiffer sideways: lean with the bike
@@ -242,6 +250,13 @@ export class Rider {
     if (!this.crashed && (groundHit || gripErr > 0.22 || footErr > 0.25 || up.y < 0.1)) this.crash();
     if (this.crashed) this.tone = Math.max(0.12, this.tone - dt * 3);
     return ext;
+  }
+
+  // spin the body as a whole about its centre of mass (no net force): used by the assist layer
+  applyTorque(t) {
+    const c = this.com; let I = 0; const r = this.x.map(p => p.sub(c)); r.forEach((ri, i) => I += MASSES[i] * ri.dot(ri));
+    const a = t.mul(1 / Math.max(I, 1)), dt = 0.001;
+    this.v = this.v.map((v, i) => v.add(a.cross(r[i]).mul(dt)));
   }
 
   crash() { this.crashed = true; this.attached = false; }

@@ -5,6 +5,7 @@ import { V, Q, X, Y, Z, rodr, clamp } from '../core/math.js';
 import { SURF_PROPS } from '../terrain/track.js';
 import * as G from './geometry.js';
 import { AirFork, CoilShock } from './suspension.js';
+import { Assist, ASSIST } from './assist.js';
 
 const GRAV = 9.81, g = new V(0, -GRAV, 0);
 // The bike chassis is the frame (+fork crown, bars, cockpit). The rider is a separate articulated body
@@ -26,6 +27,8 @@ const L = (x, y, z = 0) => new V(x - COM[0], y - COM[1], z);   // BB-frame point
 const dfl = new V(G.DF[0], G.DF[1], 0), nfl = new V(G.NF[0], G.NF[1], 0), crownL = L(G.CROWN[0], G.CROWN[1]);
 const frontShare = (SYS_X - G.AXLE_R[0]) / G.WHEELBASE;
 const PHASES = 33;
+// lateral acceleration a full A/D press asks for; shared with the test riders
+export const maxLatAccel = (v) => Math.min(ASSIST.latG * GRAV, v * v / ASSIST.minRadius);
 // rider/frame collision points (BB frame): head, shoulders, hips, bar ends, saddle, bottom bracket
 const BODY_PTS = [[0.5, 0.66, -0.4], [0.5, 0.66, 0.4], [-0.22, 0.72, 0], [0, -0.02, 0]].map(([x, y, z]) => ({ p: L(x, y, z) }));
 
@@ -50,6 +53,7 @@ export class Bike {
     this.sF = G.FORK.sag; this.sFd = 0; this.th = 0; this.thd = 0;
     this.wF = speed / R; this.wR = speed / R; this.steer = 0; this.crank = Math.PI / 2; this.cassette = 0; this.gear = 0; this.chainPos = 0;
     this.leanT = 0; this.aPrev = new V(); this.inp = { thr: 0, bF: 0, bR: 0, steer: 0, pitch: 0 };
+    this.lrF = 0; this.assist = this.assist || new Assist(); this.assist.reset(); this.assistT = new V(); this.lastAir = 0;
     this.crashed = false; this.cF = null; this.cR = null; this.air = 0; this.rim = 0; this.bottomF = 0; this.bottomR = 0; this.time = 0;
   }
 
@@ -91,7 +95,7 @@ export class Bike {
     if (this.crashed) keys = {};
     const ip = this.inp, ap = (cur, tgt, rate) => cur + clamp(tgt - cur, -rate * dt, rate * dt);
     ip.thr = ap(ip.thr, keys.w ? 1 : 0, 4); ip.bR = ap(ip.bR, keys.s ? 1 : 0, 8); ip.bF = ap(ip.bF, keys.space ? 1 : 0, 8);
-    ip.steer = ap(ip.steer, keys.steer ?? ((keys.d ? 1 : 0) - (keys.a ? 1 : 0)), 3); ip.pitch = ap(ip.pitch, keys.pitch ?? ((keys.down ? 1 : 0) - (keys.up ? 1 : 0)), 6);
+    ip.steer = ap(ip.steer, keys.steer ?? ((keys.d ? 1 : 0) - (keys.a ? 1 : 0)), ASSIST.inputRate); ip.pitch = ap(ip.pitch, keys.pitch ?? ((keys.down ? 1 : 0) - (keys.up ? 1 : 0)), 6);
 
     const q = this.q, fwd = q.rot(X), up = q.rot(Y), right = q.rot(Z);
     const fh = new V(fwd.x, 0, fwd.z).norm(), rh = new V(-fh.z, 0, fh.x);
@@ -101,19 +105,20 @@ export class Bike {
 
     // --- rider: balance by steering (steer into the fall), countersteer to initiate lean
     let target;
-    const h = 0.97, Ir = SYS_ROLL_I + MASS * h * h, wn = 7, zeta = 0.9, vabs = Math.max(Math.abs(vf), 0.1);
-    if (!grounded) target = this.steer * (1 - 2 * dt);
+    const h = 0.97, Ir = SYS_ROLL_I + MASS * h * h, wn = ASSIST.leanBandwidth, zeta = 0.9, vabs = Math.max(Math.abs(vf), 0.1);
+    if (!this.cF) target = this.steer * (1 - 8 * dt);   // front wheel unloaded: steering does nothing, so straighten the bars for touchdown
     else if (vf > 1.2) {
-      const aLat = ip.steer * Math.min(0.85 * GRAV, vf * vf / 4.5);
-      this.leanT = ap(this.leanT, Math.atan(aLat / GRAV), 1.3); const leanT = this.leanT;
+      const aLat = ip.steer * maxLatAccel(vf);
+      this.leanT = ap(this.leanT, Math.atan(aLat / GRAV), ASSIST.leanRate); const leanT = this.leanT;
       const a = MASS * h * vf * vf * Math.sin(G.HEAD_ANGLE) / G.WHEELBASE;
       const Kp = Math.min(5, (Ir * wn * wn + MASS * GRAV * h) / a), Kd = Math.min(1.2, 2 * zeta * wn * Ir / a);
       const ff = Math.atan(G.WHEELBASE * Math.tan(leanT) * GRAV / (vf * vf)) / Math.sin(G.HEAD_ANGLE);
-      target = ff + Kp * (lean - leanT) + Kd * leanRate;
+      this.lrF = (this.lrF ?? 0) + (leanRate - (this.lrF ?? 0)) * Math.min(1, dt / 0.04);   // impacts make raw roll rate spiky
+      target = ff + Kp * (lean - leanT) + Kd * clamp(this.lrF, -1.5, 1.5);
       this.leanTarget = leanT;
     } else { target = ip.steer * 0.6; this.leanT = lean; }
     const maxSteer = 0.75 / (1 + 0.05 * vabs);
-    this.steer = ap(this.steer, clamp(target, -maxSteer, maxSteer), 4);
+    this.steer = ap(this.steer, clamp(target, -maxSteer, maxSteer), ASSIST.steerRate);
 
     // --- front assembly (steered about the head-tube axis, fork slides along it)
     const st = -this.steer;
@@ -194,7 +199,10 @@ export class Bike {
     const dab = grounded ? clamp((3 - vf) / 2, 0, 1) : 0;
     if (dab > 0 && !this.crashed) T = T.add(fh.mul(-dab * (1800 * lean + 400 * leanRate)));
     // airborne: rider uses body movement to keep the bike level in roll
-    if (!grounded && !this.crashed) T = T.add(fh.mul(-(300 * lean + 60 * leanRate)));
+    // --- assistance layer (upright, directional, landing, post-landing) - see assist.js. Applied to the
+    // whole rider+bike: a share goes to the frame here, the rest to the rider's body (system.js)
+    this.assistT = this.crashed ? new V() : this.assist.torque(this, dt, { fh, rh, up, fwd, right, lean, leanRate, vf, grounded, steerIn: ip.steer });
+    T = T.add(this.assistT.mul(0.15));
 
     // --- integrate chassis (rigid body with full inertia tensor in body frame)
     const acc = F.mul(1 / CM); this.aPrev = acc;
@@ -218,6 +226,7 @@ export class Bike {
     if (pedalling) { const dA = this.wR * ratio * dt; this.crank += dA; this.chainPos += dA * G.cogR(G.RING_T); this.cassette += this.wR * dt; }
     this.wheelAngF = (this.wheelAngF || 0) + this.wF * dt; this.wheelAngR = (this.wheelAngR || 0) + this.wR * dt;
 
+    if (grounded && this.air > 0) this.lastAir = this.air;
     this.air = grounded ? 0 : this.air + dt;
     this.rim = (cF && cF.rim) || (cR && cR.rim) ? 0.3 : Math.max(0, this.rim - dt);
     this.bottomF = Math.max(0, this.bottomF - dt); this.bottomR = Math.max(0, this.bottomR - dt);

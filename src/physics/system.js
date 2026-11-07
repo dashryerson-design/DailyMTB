@@ -8,6 +8,7 @@ export class RideSystem {
   step(dt, keys) {
     const b = this.bike, r = this.rider;
     b.crashed = r.crashed;
+    if (!r.crashed && b.assistT) r.applyTorque(b.assistT.mul(0.85));
     const ext = r.step(dt, b, b.crashed ? {} : keys, this.track);
     b.step(dt, keys, ext);
   }
