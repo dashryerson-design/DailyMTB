@@ -46,10 +46,12 @@ export class RiderPose {
     const H = new V(hx, hy, hz);
     // ---- torso: forward lean angle from the posture, a little extra inward lean in corners
     const fwdLean = 0.62 + 0.25 * s.stand + 0.12 * s.accel - 0.2 * s.brake + 0.15 * s.land - 0.1 * s.air;
-    const tilt = -0.25 * s.corner + 0.3 * s.side - 0.75 * whip - 0.45 * (b.lean || 0) * s.air;   // airborne: body stays more upright while the bike lays over                                       // upper body drops into the turn
-    const dir = (a, len) => new V(Math.sin(a) * len, Math.cos(a) * len * Math.cos(tilt), Math.cos(a) * len * Math.sin(tilt));
-    const spine = H.add(dir(fwdLean * 0.55, SEG.lumbar));
-    let neck = spine.add(dir(fwdLean, SEG.thorax));
+    // lower torso goes with the hips (and the whip); the chest/shoulders stay level with the world in the air
+    const tilt = -0.25 * s.corner + 0.3 * s.side - 0.75 * whip - 0.45 * (b.lean || 0) * s.air;
+    const tiltU = (-0.25 * s.corner + 0.3 * s.side) * (1 - s.air) - (b.lean || 0) * s.air;
+    const dir = (a, len, t) => new V(Math.sin(a) * len, Math.cos(a) * len * Math.cos(t), Math.cos(a) * len * Math.sin(t));
+    const spine = H.add(dir(fwdLean * 0.55, SEG.lumbar, tilt));
+    let neck = spine.add(dir(fwdLean, SEG.thorax, tiltU));
     // keep the shoulders within arm reach of the grips
     const grips = [-1, 1].map(sd => { const g = new V(G.GRIP[0], G.GRIP[1], sd * G.GRIP_Z); return crown.add(rodr(g.sub(crown), dfl, -b.steer)); });
     for (let it = 0; it < 3; it++) for (const [i, sd] of [[0, -1], [1, 1]]) {
@@ -59,7 +61,8 @@ export class RiderPose {
     // head stays steadier than the body: blend its "up" toward world up, look ahead
     const wUp = b.q.inv(new V(0, 1, 0)), headUp = new V(0.35, 1, 0).norm().mul(0.5).add(wUp.mul(0.5)).norm();
     // airborne: upper body counter-rotates to keep facing the direction of travel while the bike whips
-    const twist = -0.8 * (s.yawRel || 0) - 0.25 * whip, rotY = (p) => { const d = p.sub(spine), c = Math.cos(twist), sn = Math.sin(twist); return spine.add(new V(d.x * c + d.z * sn, d.y, -d.x * sn + d.z * c)); };
+    const twist = -(s.yawRel || 0),   // shoulders keep facing the direction of travel
+       rotY = (p) => { const d = p.sub(spine), c = Math.cos(twist), sn = Math.sin(twist); return spine.add(new V(d.x * c + d.z * sn, d.y, -d.x * sn + d.z * c)); };
     neck = rotY(neck);
     const head = neck.add(headUp.mul(SEG.neck)).add(new V(0.06, 0, 0));
     const P = new Array(17);
