@@ -1,0 +1,46 @@
+<meta charset="utf-8">
+<title>DailyMTB</title>
+<meta name="claude:viewport-fit-sides" content="cover">
+<style>
+/* full-bleed 3D view; HUD panels pinned to the corners */
+:root { --ink: #eef2ec; --dim: #a9b4a8; --panel: rgba(14, 20, 16, 0.72); --fork: #e3b448; --shock: #e8661c; --warn: #f0b429; --bad: #ff5a4f;
+  --mono: "JetBrains Mono", ui-monospace, Menlo, monospace; --sans: "Barlow", system-ui, sans-serif; color-scheme: dark; }
+[hidden] { display: none !important; }
+html, body { height: 100%; margin: 0; background: #0d120f; color: var(--ink); overflow: hidden; font: 13px/1.35 var(--sans); }
+canvas#view { position: fixed; inset: 0; width: 100%; height: 100%; display: block; }
+.panel { position: fixed; background: var(--panel); backdrop-filter: blur(6px); border-radius: 6px; padding: 10px 12px; }
+#stats { top: calc(12px + env(safe-area-inset-top, 0px)); left: max(12px, env(safe-area-inset-left, 0px)); width: 280px; display: grid; gap: 4px; }
+.big { font: 600 34px/1 var(--mono); letter-spacing: -0.02em; } .big small { font-size: 13px; color: var(--dim); }
+.row { display: flex; align-items: center; gap: 8px; font-variant-numeric: tabular-nums; } .row span { color: var(--dim); min-width: 74px; } .row b { font: 500 12px var(--mono); margin-left: auto; }
+.row span + b + span { margin-left: 10px; min-width: 0; }
+.bar { flex: 1; height: 6px; background: rgba(255,255,255,0.1); border-radius: 3px; overflow: hidden; } .bar i { display: block; height: 100%; background: var(--fork); }
+.row:nth-child(3) .bar i, .row:nth-child(4) .bar i { background: var(--shock); }
+.flags { display: flex; flex-wrap: wrap; gap: 4px; min-height: 18px; } .flags em { font: 600 11px var(--mono); font-style: normal; padding: 1px 6px; border-radius: 3px; background: rgba(255,255,255,0.12); letter-spacing: 0.04em; }
+.flags em.w { background: var(--warn); color: #1b1300; } .flags em.c { background: var(--bad); color: #fff; }
+.cam { color: var(--dim); font-size: 11px; }
+#help { bottom: calc(12px + env(safe-area-inset-bottom, 0px)); left: max(12px, env(safe-area-inset-left, 0px)); max-width: 300px; font-size: 12px; }
+#help h2 { font: 700 15px var(--sans); margin: 0 0 6px; letter-spacing: 0.06em; text-transform: uppercase; }
+#help ul { list-style: none; margin: 6px 0 0; padding: 0; columns: 2; color: var(--dim); }
+kbd { font: 500 11px var(--mono); background: rgba(255,255,255,0.14); border-radius: 3px; padding: 0 4px; color: var(--ink); }
+#telemetry { bottom: calc(12px + env(safe-area-inset-bottom, 0px)); right: max(12px, env(safe-area-inset-right, 0px)); }
+#telemetry .lg { display: flex; gap: 12px; font-size: 11px; color: var(--dim); margin-bottom: 4px; } .lg i { display: inline-block; width: 10px; height: 3px; vertical-align: middle; margin-right: 4px; }
+#graph { width: 300px; height: 90px; display: block; }
+#loading { position: fixed; inset: 0; display: grid; place-items: center; background: #0d120f; font: 600 16px var(--mono); letter-spacing: 0.1em; }
+@media (max-width: 700px) { #help, #telemetry { display: none; } #stats { width: auto; right: 12px; } }
+</style>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Barlow:wght@400;600;700&family=JetBrains+Mono:wght@500;600&display=swap">
+<canvas id="view"></canvas>
+<div id="stats" class="panel"></div>
+<div id="help" class="panel">
+  <h2>DailyMTB · Physics test track</h2>
+  <div><kbd>W</kbd> pedal · <kbd>S</kbd> rear brake · <kbd>Space</kbd> front brake · <kbd>A</kbd>/<kbd>D</kbd> steer</div>
+  <div><kbd>↑</kbd>/<kbd>↓</kbd> shift weight forward/back · <kbd>R</kbd> restart section · <kbd>C</kbd> camera · <kbd>P</kbd> pause</div>
+  <ul id="sections"></ul>
+</div>
+<div id="telemetry" class="panel">
+  <div class="lg"><span><i style="background:var(--fork)"></i>Fork travel</span><span><i style="background:var(--shock)"></i>Rear travel</span><span>last 5 s</span></div>
+  <canvas id="graph" width="600" height="180"></canvas>
+</div>
+<div id="loading">BUILDING TRAIL…</div>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
+<script type="module" src="src/main.js"></script>
