@@ -1,13 +1,17 @@
-// Test track: centerline layout, features, and a 0.15 m physics heightfield with surface map.
+// Trails: a fixed physics test layout (used by the tests) or a procedurally generated downhill run for a
+// biome. Heightfield = coarse 2 m mountain terrain everywhere + 0.2 m detail tiles only along the trail.
 import { clamp, smooth, lerp } from '../core/math.js';
 
-export const SURF = { DIRT: 0, GRAVEL: 1, ROCK: 2, GRASS: 3, ROOT: 4 };
+export const SURF = { DIRT: 0, GRAVEL: 1, ROCK: 2, GRASS: 3, ROOT: 4, SNOW: 5, ICE: 6, SAND: 7 };
 export const SURF_PROPS = [
   { name: 'Dirt', mu: 1.05, crr: 0.02 },
   { name: 'Gravel', mu: 0.72, crr: 0.035 },
   { name: 'Rock', mu: 0.92, crr: 0.012 },
   { name: 'Grass', mu: 0.78, crr: 0.05 },
   { name: 'Root', mu: 0.55, crr: 0.02 },
+  { name: 'Packed snow', mu: 0.68, crr: 0.03 },
+  { name: 'Ice', mu: 0.32, crr: 0.01 },
+  { name: 'Sand', mu: 0.7, crr: 0.07 },
 ];
 const D2R = Math.PI / 180;
 
@@ -28,7 +32,7 @@ export function makeNoise(seed) {
   };
 }
 
-// Segments: straight {len} or arc {arc: radius, ang: degrees (+ right)}; bank in degrees.
+// ---- the fixed physics test track (tests/sim.mjs, tests/assist.mjs)
 const S_ = SURF;
 export const LAYOUT = [
   { len: 25, name: 'Start' },
@@ -56,8 +60,53 @@ export const LAYOUT = [
   { len: 45, name: 'Runout' },
 ];
 
-const W = 1.7;        // tread half-width
-const GRADE = 0.10;   // base downhill grade
+// ---- biomes: what the generator builds and what the ground is made of
+export const BIOMES = {
+  forest: { trail: SURF.DIRT, off: SURF.GRASS, grade: [0.07, 0.14], relief: 7, ridge: 4, valley: 0.09, roots: 1, rocks: 1, moss: true,
+    w: { straight: 1.2, turn: 2, berm: 3, bumps: 3, rollers: 1.5, table: 1, bigjump: 0.6, drop: 1, rockslab: 0.7, tech: 1.6 } },
+  snow: { trail: SURF.SNOW, off: SURF.SNOW, grade: [0.08, 0.16], relief: 14, ridge: 12, valley: 0.13, roots: 0, rocks: 0.5, ice: true,
+    w: { straight: 2.2, turn: 2.6, berm: 2.4, bumps: 0.9, rollers: 2, table: 1.6, bigjump: 1, drop: 0.6, rockslab: 0.5, tech: 0.8, ice: 0.5 } },
+  desert: { trail: SURF.DIRT, off: SURF.SAND, grade: [0.07, 0.15], relief: 10, ridge: 8, valley: 0.11, roots: 0, rocks: 1.3, sandstone: true,
+    w: { straight: 2.4, turn: 2, berm: 1.4, bumps: 1.6, rollers: 1.5, table: 1, bigjump: 1.2, drop: 1.8, rockslab: 2, tech: 1, sand: 0.6 } },
+  test: { trail: SURF.DIRT, off: SURF.GRASS, grade: [0.1, 0.1], relief: 2, ridge: 0, valley: 0.05, roots: 1, rocks: 1, w: {} },
+};
+
+const W = 1.7;        // tread half-width (3.4 m wide trail)
+
+// generate a downhill run: features are the proven shapes below, placed with rideability rules
+export function generateLayout(seed, biome) {
+  const r = rng(seed * 7919 + 13), B = BIOMES[biome], target = 1050 + r() * 850;
+  const out = [{ len: 30, name: 'Start', grade: 0.08 }];
+  let heading = 0, s = 30, n = 0, last = '';
+  const names = { berm: 'Berm', bumps: biome === 'forest' ? 'Root garden' : 'Rock garden', rollers: 'Rollers', table: 'Tabletop', bigjump: 'Big jump', drop: 'Drop', rockslab: biome === 'desert' ? 'Sandstone slabs' : 'Rock slab', tech: 'Tech turns', ice: 'Ice patch', sand: 'Sand wash' };
+  const G = () => lerp(B.grade[0], B.grade[1], r());
+  const push = (seg) => { out.push(seg); s += seg.arc ? seg.arc * Math.abs(seg.ang) * D2R : seg.len; };
+  const turnAng = (want) => {          // keep the run heading downhill: never more than 80° off the fall line
+    let sign = Math.abs(heading) > 35 * D2R ? -Math.sign(heading) : (r() < 0.5 ? -1 : 1);
+    let ang = Math.min(want, 80 * D2R - sign * heading); if (ang < 25 * D2R) { sign = -sign; ang = Math.min(want, 80 * D2R - sign * heading); }
+    heading += sign * ang; return sign * ang / D2R;
+  };
+  const pick = () => { const e = Object.entries(B.w).filter(([k]) => k !== last); const tot = e.reduce((a, [, v]) => a + v, 0); let q = r() * tot; for (const [k, v] of e) if ((q -= v) <= 0) return k; return 'straight'; };
+  while (s < target - 70) {
+    const k = pick(); last = k; n++;
+    const jump = k === 'rollers' || k === 'table' || k === 'bigjump' || k === 'drop';
+    if (jump) push(k === 'bigjump' ? { len: 38 + r() * 12, grade: 0.15 } : { len: 18 + r() * 14, grade: 0.11 + r() * 0.04 });   // run-in long/steep enough to arrive with speed                // run-in: straight, steady, fast enough
+    switch (k) {
+      case 'straight': push({ len: 25 + r() * 35, grade: G() * (r() < 0.25 ? 1.35 : 1) }); break;
+      case 'turn': { const R = 14 + r() * 16; push({ arc: R, ang: turnAng((40 + r() * 50) * D2R), grade: 0.06 + r() * 0.03 }); break; }
+      case 'berm': { const R = 9 + r() * 13, bank = clamp(48 - R * 1.1 + r() * 6, 24, 44); push({ arc: R, ang: turnAng((70 + r() * 70) * D2R), bank, grade: 0.07, name: names.berm }); break; }
+      case 'tech': { push({ arc: 8 + r() * 3, ang: turnAng((50 + r() * 35) * D2R), feat: 'innerRocks', grade: 0.06, name: names.tech }); push({ len: 6 + r() * 6, grade: 0.07 }); push({ arc: 8 + r() * 4, ang: turnAng((45 + r() * 35) * D2R), grade: 0.06 }); break; }
+      case 'bumps': push({ len: 35 + r() * 35, feat: 'bumps', grade: G(), name: names.bumps, roots: B.roots, rocks: B.rocks }); break;
+      case 'rockslab': push({ len: 15 + r() * 10, feat: 'rockslab', surf: SURF.ROCK, grade: G(), name: names.rockslab }); break;
+      case 'ice': push({ len: 10 + r() * 6, surf: SURF.ICE, grade: 0.06, name: names.ice }); break;
+      case 'sand': push({ len: 15 + r() * 12, surf: SURF.SAND, grade: 0.09, name: names.sand }); break;
+      default: push({ len: { rollers: 32, table: 22, bigjump: 32, drop: 22 }[k], feat: k, grade: 0.1, name: names[k], safe: true });
+    }
+    if (jump) push({ len: 16 + r() * 10, grade: 0.08 });                             // runout after every jump/drop
+  }
+  push({ len: 45, name: 'Finish', grade: 0.05, finish: true });
+  return out;
+}
 
 function profile(seg, ls, d, noise) {
   let h = -0.04 * Math.max(0, 1 - (d / W) ** 2), surf = seg.surf;
@@ -69,146 +118,183 @@ function profile(seg, ls, d, noise) {
       else if (ls < 9.5) h += 1.2;
       else if (ls < 16) h += 0.6 * (1 + Math.cos(Math.PI * (ls - 9.5) / 6.5));
       break;
-    case 'bigjump':
+    case 'bigjump': {
+      // generated tracks use a filled gap (step-down deck) so coming up short rolls out instead of casing
+      const pit = seg.safe ? 0.35 : -1.0;
       if (ls < 5) h += 1.4 * Math.pow(ls / 5, 1.7);
-      else if (ls < 6) h += lerp(1.4, -1.0, smooth(ls - 5));
-      else if (ls < 11.5) h += -1.0;
-      else if (ls < 12.5) h += lerp(-1.0, 0.25, smooth(ls - 11.5));
+      else if (ls < 6) h += lerp(1.4, pit, smooth(ls - 5));
+      else if (ls < 11.5) h += pit;
+      else if (ls < 12.5) h += lerp(pit, 0.25, smooth(ls - 11.5));
       else if (ls < 20) h += lerp(0.25, -2.0, smooth((ls - 12.5) / 7.5));
-      break;
+      break; }
     case 'rockslab': h += 0.05 * noise(ls * 0.9, d * 0.9); break;
     case 'drop': if (ls > 3 && ls < 8.05) { surf = SURF.ROCK; h += 0.04 * noise(ls * 1.3, d * 1.3); } break;
   }
   if (seg.bank) {
-    const f = smooth(Math.min(seg.ls === undefined ? ls : ls, seg.len - ls) / 7);
+    const f = smooth(Math.min(ls, seg.len - ls) / 7);
     const o = -seg.sign * d, wb = W + 0.5, tb = Math.tan(seg.bank * D2R * f);
-    const oc = Math.max(-wb, Math.min(o, 0.65 * wb)); h += tb * (oc + wb) ** 2 / (2 * wb) - tb * wb / 2; // riding line stays on grade
+    const oc = Math.max(-wb, Math.min(o, 0.65 * wb)); h += tb * (oc + wb) ** 2 / (2 * wb) - tb * wb / 2;
   }
   return [h, surf];
 }
 
-export function buildTrack(seed = 7) {
-  const t0 = Date.now(), ds = 0.25, noise = makeNoise(seed), n2 = makeNoise(seed + 11);
-  const S = [], X = [], Z = [], PSI = [], SEG = [], segs = [];
+// a rideable track for a biome: generate, check, and retry with a new seed if any rule is broken
+export function generateTrack(biome, seed = (Math.random() * 1e9) | 0) {
+  for (let tries = 0; tries < 8; tries++) {
+    const t = buildTrack(seed + tries * 101, { biome });
+    if (t.check.ok) return t;
+    console.warn('track rejected:', t.check.why);
+  }
+  return buildTrack(seed, { biome });
+}
+
+export function buildTrack(seed = 7, opts = {}) {
+  const t0 = Date.now(), biome = opts.biome || 'test', B = BIOMES[biome], ds = 0.25;
+  const layout = opts.layout || (biome === 'test' ? LAYOUT : generateLayout(seed, biome));
+  const noise = makeNoise(seed), n2 = makeNoise(seed + 11), n3 = makeNoise(seed + 29);
+  const S = [], X = [], Z = [], PSI = [], SEG = [], GR = [], segs = [];
   let x = 0, z = 0, psi = 0, s = 0;
-  LAYOUT.forEach((def, k) => {
+  layout.forEach((def, k) => {
     const len = def.arc ? def.arc * Math.abs(def.ang) * D2R : def.len;
-    const seg = { ...def, len, s0: s, surf: def.surf ?? SURF.DIRT, sign: def.ang ? Math.sign(def.ang) : 0 };
+    const seg = { ...def, len, s0: s, surf: def.surf ?? B.trail, sign: def.ang ? Math.sign(def.ang) : 0, grade: def.grade ?? 0.1 };
     segs.push(seg);
     const n = Math.round(len / ds);
     for (let i = 0; i < n; i++) {
-      S.push(s); X.push(x); Z.push(z); PSI.push(psi); SEG.push(k);
+      S.push(s); X.push(x); Z.push(z); PSI.push(psi); SEG.push(k); GR.push(seg.grade);
       if (def.arc) psi += seg.sign * ds / def.arc;
       x += Math.cos(psi) * ds; z += Math.sin(psi) * ds; s += ds;
     }
   });
-  S.push(s); X.push(x); Z.push(z); PSI.push(psi); SEG.push(segs.length - 1);
+  S.push(s); X.push(x); Z.push(z); PSI.push(psi); SEG.push(segs.length - 1); GR.push(GR[GR.length - 1]);
   const total = s, NS = S.length;
 
+  // elevation: grades eased over 12 m (no sudden gradient changes), plus the drops built into jump/drop features
+  const EL = new Float32Array(NS), half = 24; let acc = 0, run = 0;
+  for (let i = 0; i < Math.min(NS, half); i++) run += GR[i];
+  for (let i = 0; i < NS; i++) {
+    const a = i + half < NS ? GR[i + half] : GR[NS - 1], b = i - half - 1 >= 0 ? GR[i - half - 1] : GR[0];
+    run += a - b; EL[i] = acc; acc -= (run / (2 * half + 1)) * ds;
+  }
   const events = [];
   for (const sg of segs) {
     if (sg.feat === 'bigjump') events.push({ s: sg.s0 + 20, D: 2.0 });
     if (sg.feat === 'drop') events.push({ s: sg.s0 + 8.05, D: 1.1 });
   }
   const offset = (s) => { let o = 0; for (const e of events) if (s >= e.s) o -= e.D * Math.max(0, Math.min(1, 1 - (s - e.s - 18) / 70)); return o; };
-  const elev = (s) => -GRADE * s + offset(s);
+  const elev = (s) => { const f = clamp(s / ds, 0, NS - 1), i = Math.min(Math.floor(f), NS - 2); return lerp(EL[i], EL[i + 1], f - i) + offset(s); };
 
-  // grid
+  // ---- coarse mountain terrain (2 m) around the run: the land follows the trail's descent, rises into
+  // valley walls and ridges away from it, with biome-specific relief
   let minX = Infinity, maxX = -Infinity, minZ = Infinity, maxZ = -Infinity;
   for (let i = 0; i < NS; i++) { minX = Math.min(minX, X[i]); maxX = Math.max(maxX, X[i]); minZ = Math.min(minZ, Z[i]); maxZ = Math.max(maxZ, Z[i]); }
-  const M = 40; minX -= M; minZ -= M; maxX += M; maxZ += M;
-  const res = 0.15, nx = Math.ceil((maxX - minX) / res) + 1, nz = Math.ceil((maxZ - minZ) / res) + 1;
-  const H = new Float32Array(nx * nz), SF = new Uint8Array(nx * nz).fill(SURF.GRASS), TD = new Uint8Array(nx * nz).fill(255);
-
-  // coarse natural terrain (2 m)
-  const cr = 2, cnx = Math.ceil((maxX - minX) / cr) + 2, cnz = Math.ceil((maxZ - minZ) / cr) + 2, CH = new Float32Array(cnx * cnz);
+  const M = biome === 'test' ? 40 : 70; minX -= M; minZ -= M; maxX += M; maxZ += M;
+  const cr = 2, cnx = Math.ceil((maxX - minX) / cr) + 2, cnz = Math.ceil((maxZ - minZ) / cr) + 2, CH = new Float32Array(cnx * cnz), CD = new Float32Array(cnx * cnz);
+  const step = biome === 'test' ? 8 : 24;
   for (let j = 0; j < cnz; j++) for (let i = 0; i < cnx; i++) {
     const px = minX + i * cr, pz = minZ + j * cr; let ws = 0, we = 0, dm = 1e9;
-    for (let k = 0; k < NS; k += 8) {
-      const dx = px - X[k], dz = pz - Z[k], d2 = dx * dx + dz * dz, w = Math.exp(-d2 / 800);
-      ws += w; we += w * elev(S[k]); if (d2 < dm) dm = d2;
+    for (let k = 0; k < NS; k += step) {
+      const dx = px - X[k], dz = pz - Z[k], d2 = dx * dx + dz * dz; if (d2 < dm) dm = d2;
+      if (d2 < 9000) { const w = Math.exp(-d2 / 800); ws += w; we += w * EL[k]; }
     }
-    const dist = Math.sqrt(dm), base = ws > 1e-9 ? we / ws : elev(S[NS - 1]);
-    CH[i + j * cnx] = base + 0.05 * Math.min(dist, 80) + 1.8 * noise(px / 45, pz / 45) + 0.4 * noise(px / 9 + 50, pz / 9);
+    const dist = Math.sqrt(dm), base = ws > 1e-9 ? we / ws : elev(S[NS - 1]), far = smooth((dist - 8) / 40);
+    const ridged = 1 - Math.abs(noise(px / 110, pz / 110)), mtn = B.ridge * ridged * ridged * far;
+    CH[i + j * cnx] = base + B.valley * Math.min(dist, 90) + far * (B.relief * 0.35 * noise(px / 55 + 7, pz / 55) + mtn) + 0.4 * noise(px / 9 + 50, pz / 9);
+    CD[i + j * cnx] = dist;
   }
-  const coarse = (px, pz) => {
-    const fx = (px - minX) / cr, fz = (pz - minZ) / cr, i = clamp(Math.floor(fx), 0, cnx - 2), j = clamp(Math.floor(fz), 0, cnz - 2), tx = fx - i, tz = fz - j, k = i + j * cnx;
-    return (CH[k] * (1 - tx) + CH[k + 1] * tx) * (1 - tz) + (CH[k + cnx] * (1 - tx) + CH[k + cnx + 1] * tx) * tz;
+  const cbil = (A, px, pz) => {
+    const fx = (px - minX) / cr, fz = (pz - minZ) / cr, i = clamp(Math.floor(fx), 0, cnx - 2), j = clamp(Math.floor(fz), 0, cnz - 2), tx = clamp(fx - i, 0, 1), tz = clamp(fz - j, 0, 1), k = i + j * cnx;
+    return (A[k] * (1 - tx) + A[k + 1] * tx) * (1 - tz) + (A[k + cnx] * (1 - tx) + A[k + cnx + 1] * tx) * tz;
   };
-  for (let j = 0; j < nz; j++) for (let i = 0; i < nx; i++) {
-    const px = minX + i * res, pz = minZ + j * res;
-    H[i + j * nx] = coarse(px, pz) + 0.08 * n2(px / 2.3, pz / 2.3);
-  }
+  const natural = (px, pz) => cbil(CH, px, pz) + 0.08 * n2(px / 2.3, pz / 2.3);
 
-  // corridor carve: nearest centerline sample per cell
-  const R = 7.2, rc = Math.ceil(R / res), best = new Float32Array(nx * nz).fill(1e9), bi = new Int32Array(nx * nz).fill(-1);
+  // ---- 0.2 m detail tiles, only where the trail is
+  const res = biome === 'test' ? 0.15 : 0.2, TS = 64, tiles = new Map(), offN = 1 << 15;
+  const key = (ti, tj) => (ti + offN) * 65536 + (tj + offN);
+  const tile = (ti, tj, make) => {
+    const k = key(ti, tj); let t = tiles.get(k);
+    if (!t && make) {
+      t = { H: new Float32Array(TS * TS), SF: new Uint8Array(TS * TS).fill(B.off), TD: new Uint8Array(TS * TS).fill(255), best: new Float32Array(TS * TS).fill(1e9), bi: new Int32Array(TS * TS).fill(-1) };
+      for (let j = 0; j < TS; j++) for (let i = 0; i < TS; i++) t.H[i + j * TS] = natural(minX + (ti * TS + i) * res, minZ + (tj * TS + j) * res);
+      tiles.set(k, t);
+    }
+    return t;
+  };
+  const cellH = (i, j) => { const t = tiles.get(key(i >> 6, j >> 6)); return t ? t.H[(i & 63) + (j & 63) * TS] : natural(minX + i * res, minZ + j * res); };
+  const cell = (i, j) => { const t = tile(i >> 6, j >> 6, true); return [t, (i & 63) + (j & 63) * TS]; };
+
+  const R = 7.2, rc = Math.ceil(R / res);
   for (let k = 0; k < NS; k++) {
     const ci = Math.round((X[k] - minX) / res), cj = Math.round((Z[k] - minZ) / res);
-    for (let j = Math.max(0, cj - rc); j <= Math.min(nz - 1, cj + rc); j++) for (let i = Math.max(0, ci - rc); i <= Math.min(nx - 1, ci + rc); i++) {
-      const dx = minX + i * res - X[k], dz = minZ + j * res - Z[k], d2 = dx * dx + dz * dz, id = i + j * nx;
-      if (d2 < R * R && d2 < best[id]) { best[id] = d2; bi[id] = k; }
+    for (let j = cj - rc; j <= cj + rc; j++) for (let i = ci - rc; i <= ci + rc; i++) {
+      const dx = minX + i * res - X[k], dz = minZ + j * res - Z[k], d2 = dx * dx + dz * dz; if (d2 >= R * R) continue;
+      const [t, id] = cell(i, j); if (d2 < t.best[id]) { t.best[id] = d2; t.bi[id] = k; }
     }
   }
-  for (let id = 0; id < nx * nz; id++) {
-    const k = bi[id]; if (k < 0) continue;
-    const i = id % nx, j = (id / nx) | 0, px = minX + i * res, pz = minZ + j * res;
-    const c = Math.cos(PSI[k]), sn = Math.sin(PSI[k]), dx = px - X[k], dz = pz - Z[k];
-    const along = dx * c + dz * sn, d = -dx * sn + dz * c, sc = S[k] + along, seg = segs[SEG[k]];
-    const [ph, surf] = profile(seg, clamp(sc - seg.s0, 0, seg.len), d, noise);
-    const o = -seg.sign * d, t0b = (seg.bank && o > 0) ? 3.0 : W + 0.5, ad = Math.abs(d);
-    const b = smooth((ad - t0b) / 4.0);
-    H[id] = lerp(elev(sc) + ph, H[id], b);
-    if (ad < W + 0.3) SF[id] = surf;
-    TD[id] = Math.min(255, Math.round(ad * 20));
+  for (const [kk, t] of tiles) {
+    const ti = Math.floor(kk / 65536) - offN, tj = (kk % 65536) - offN;
+    for (let id = 0; id < TS * TS; id++) {
+      const k = t.bi[id]; if (k < 0) continue;
+      const px = minX + (ti * TS + (id & 63)) * res, pz = minZ + (tj * TS + (id >> 6)) * res;
+      const c = Math.cos(PSI[k]), sn = Math.sin(PSI[k]), dx = px - X[k], dz = pz - Z[k];
+      const along = dx * c + dz * sn, d = -dx * sn + dz * c, sc = S[k] + along, seg = segs[SEG[k]];
+      const [ph, surf] = profile(seg, clamp(sc - seg.s0, 0, seg.len), d, noise);
+      const o = -seg.sign * d, t0b = (seg.bank && o > 0) ? 3.0 : W + 0.5, ad = Math.abs(d);
+      t.H[id] = lerp(elev(sc) + ph, t.H[id], smooth((ad - t0b) / 4.0));
+      if (ad < W + 0.3) t.SF[id] = surf;
+      t.TD[id] = Math.min(255, Math.round(ad * 20));
+    }
+    delete t.best; delete t.bi;
   }
 
-  // point helpers
   const sampleAt = (s) => { const k = clamp(Math.round(s / ds), 0, NS - 1); return { x: X[k], z: Z[k], psi: PSI[k], s: S[k] }; };
   const toWorld = (s, d) => { const p = sampleAt(s); return { x: p.x - Math.sin(p.psi) * d, z: p.z + Math.cos(p.psi) * d, psi: p.psi }; };
-  const idx = (px, pz) => clamp(Math.round((px - minX) / res), 0, nx - 1) + clamp(Math.round((pz - minZ) / res), 0, nz - 1) * nx;
   const h = (px, pz) => {
-    const fx = (px - minX) / res, fz = (pz - minZ) / res, i = clamp(Math.floor(fx), 0, nx - 2), j = clamp(Math.floor(fz), 0, nz - 2), tx = fx - i, tz = fz - j, k = i + j * nx;
-    return (H[k] * (1 - tx) + H[k + 1] * tx) * (1 - tz) + (H[k + nx] * (1 - tx) + H[k + nx + 1] * tx) * tz;
+    const fx = (px - minX) / res, fz = (pz - minZ) / res, i = Math.floor(fx), j = Math.floor(fz), tx = fx - i, tz = fz - j;
+    const t = tiles.get(key(i >> 6, j >> 6));
+    if (t && (i & 63) < 63 && (j & 63) < 63) { const k = (i & 63) + (j & 63) * TS; return (t.H[k] * (1 - tx) + t.H[k + 1] * tx) * (1 - tz) + (t.H[k + TS] * (1 - tx) + t.H[k + TS + 1] * tx) * tz; }
+    if (!t && !tiles.get(key((i + 1) >> 6, (j + 1) >> 6))) return natural(px, pz);
+    return (cellH(i, j) * (1 - tx) + cellH(i + 1, j) * tx) * (1 - tz) + (cellH(i, j + 1) * (1 - tx) + cellH(i + 1, j + 1) * tx) * tz;
   };
+  const lookup = (px, pz, f, dflt) => { const i = Math.round((px - minX) / res), j = Math.round((pz - minZ) / res), t = tiles.get(key(i >> 6, j >> 6)); return t ? f(t, (i & 63) + (j & 63) * TS) : dflt; };
 
-  // obstacles: rocks (domes) and roots (half-capsules) stamped into the heightfield
+  // ---- obstacles: rocks (domes) and roots (half-capsules) stamped into the detail tiles
   const r = rng(seed + 3), rocks = [], roots = [];
   for (const sg of segs) {
+    const rd = sg.rocks ?? B.rocks ?? 1, rtd = sg.roots ?? B.roots ?? 1;
     if (sg.feat === 'bumps') {
-      for (let k = 0; k < 55; k++) {
-        const big = k < 4;
-        rocks.push({ s: sg.s0 + 3 + r() * (sg.len - 6), d: (r() * 2 - 1) * 1.5, rr: big ? 0.4 + r() * 0.12 : 0.1 + r() * 0.16, rh: big ? 0.15 + r() * 0.06 : 0.04 + r() * 0.08 });
-      }
-      for (let ls = 3; ls < sg.len - 3; ls += 2.2 + r() * 3) roots.push({ s: sg.s0 + ls, ang: (r() - 0.5) * 0.9, rr: 0.03 + r() * 0.03, len: 4.2 });
+      const nR = Math.round(55 * rd * sg.len / 70);
+      for (let k = 0; k < nR; k++) { const big = k < 4 * rd; rocks.push({ s: sg.s0 + 3 + r() * (sg.len - 6), d: (r() * 2 - 1) * 1.5, rr: big ? 0.4 + r() * 0.12 : 0.1 + r() * 0.16, rh: big ? 0.15 + r() * 0.06 : 0.04 + r() * 0.08 }); }
+      if (rtd > 0) for (let ls = 3; ls < sg.len - 3; ls += (2.2 + r() * 3) / rtd) roots.push({ s: sg.s0 + ls, ang: (r() - 0.5) * 0.9, rr: 0.03 + r() * 0.03, len: 4.2 });
     }
-    if (sg.feat === 'innerRocks') for (let k = 0; k < 14; k++) rocks.push({ s: sg.s0 + 1 + r() * (sg.len - 2), d: sg.sign * (1.2 + r() * 1.2), rr: 0.15 + r() * 0.2, rh: 0.08 + r() * 0.15 });
-    if (sg.feat === 'rockslab') for (let k = 0; k < 18; k++) rocks.push({ s: sg.s0 + r() * sg.len, d: (r() * 2 - 1) * 1.6, rr: 0.1 + r() * 0.15, rh: 0.03 + r() * 0.07 });
+    if (sg.feat === 'innerRocks') for (let k = 0; k < 14 * rd; k++) rocks.push({ s: sg.s0 + 1 + r() * (sg.len - 2), d: sg.sign * (1.2 + r() * 1.2), rr: 0.15 + r() * 0.2, rh: 0.08 + r() * 0.15 });
+    if (sg.feat === 'rockslab') for (let k = 0; k < 18 * rd; k++) rocks.push({ s: sg.s0 + r() * sg.len, d: (r() * 2 - 1) * 1.6, rr: 0.1 + r() * 0.15, rh: 0.03 + r() * 0.07 });
     if (sg.feat === 'drop') {
       for (let k = 0; k < 10; k++) { const side = k % 2 ? 1 : -1; rocks.push({ s: sg.s0 + 6.6 + r() * 1.3, d: side * (1.0 + r() * 1.1), rr: 0.25 + r() * 0.2, rh: 0.15 + r() * 0.2 }); }
       for (let k = 0; k < 6; k++) rocks.push({ s: sg.s0 + 8.3 + r() * 0.6, d: (r() * 2 - 1) * 2.2, rr: 0.3 + r() * 0.2, rh: 0.25 + r() * 0.3, face: true });
     }
+    // trail-side boulders (off the riding line) make the corridor feel natural
+    if (biome !== 'test' && r() < 0.5 * rd) for (let k = 0; k < 3; k++) rocks.push({ s: sg.s0 + r() * sg.len, d: (r() < 0.5 ? -1 : 1) * (2.6 + r() * 2.5), rr: 0.3 + r() * 0.6, rh: 0.2 + r() * 0.5, side: true });
   }
   for (const rk of rocks) {
     const p = toWorld(rk.s, rk.d); rk.x = p.x; rk.z = p.z; rk.base = h(p.x, p.z);
     const rc2 = Math.ceil(rk.rr / res) + 1, ci = Math.round((p.x - minX) / res), cj = Math.round((p.z - minZ) / res);
     for (let j = cj - rc2; j <= cj + rc2; j++) for (let i = ci - rc2; i <= ci + rc2; i++) {
-      if (i < 0 || j < 0 || i >= nx || j >= nz) continue;
       const q = Math.hypot(minX + i * res - p.x, minZ + j * res - p.z) / rk.rr; if (q >= 1) continue;
-      const hh = rk.base + rk.rh * Math.pow(1 - q * q, 0.9), id = i + j * nx;
-      if (hh > H[id]) { H[id] = hh; SF[id] = SURF.ROCK; }
+      const [t, id] = cell(i, j), hh = rk.base + rk.rh * Math.pow(1 - q * q, 0.9);
+      if (hh > t.H[id]) { t.H[id] = hh; t.SF[id] = SURF.ROCK; }
     }
   }
   for (const rt of roots) {
     const p = toWorld(rt.s, 0), a = p.psi + Math.PI / 2 + rt.ang, ux = Math.cos(a), uz = Math.sin(a);
     rt.x0 = p.x - ux * rt.len / 2; rt.z0 = p.z - uz * rt.len / 2; rt.x1 = p.x + ux * rt.len / 2; rt.z1 = p.z + uz * rt.len / 2;
     const steps = Math.ceil(rt.len / res), rc2 = Math.ceil(rt.rr / res) + 1, done = new Set();
-    for (let t = 0; t <= steps; t++) {
-      const cx = rt.x0 + ux * rt.len * t / steps, cz = rt.z0 + uz * rt.len * t / steps, ci = Math.round((cx - minX) / res), cj = Math.round((cz - minZ) / res);
+    for (let tt = 0; tt <= steps; tt++) {
+      const cx = rt.x0 + ux * rt.len * tt / steps, cz = rt.z0 + uz * rt.len * tt / steps, ci = Math.round((cx - minX) / res), cj = Math.round((cz - minZ) / res);
       for (let j = cj - rc2; j <= cj + rc2; j++) for (let i = ci - rc2; i <= ci + rc2; i++) {
-        const id = i + j * nx; if (done.has(id)) continue;
         const dx = minX + i * res - rt.x0, dz = minZ + j * res - rt.z0, along = clamp(dx * ux + dz * uz, 0, rt.len);
         const q = Math.hypot(dx - ux * along, dz - uz * along) / rt.rr; if (q >= 1) continue;
-        done.add(id); H[id] += 0.75 * rt.rr * Math.sqrt(1 - q * q); SF[id] = SURF.ROOT;
+        const [t, id] = cell(i, j); if (done.has(t.H.length * 0 + id + (i >> 6) * 1e7 + (j >> 6) * 1e4)) continue;
+        done.add(id + (i >> 6) * 1e7 + (j >> 6) * 1e4); t.H[id] += 0.75 * rt.rr * Math.sqrt(1 - q * q); t.SF[id] = SURF.ROOT;
       }
     }
   }
@@ -217,10 +303,27 @@ export function buildTrack(seed = 7) {
     const e = res, gx = (h(px + e, pz) - h(px - e, pz)) / (2 * e), gz = (h(px, pz + e) - h(px, pz - e)) / (2 * e), l = Math.hypot(gx, 1, gz);
     return { x: -gx / l, y: 1 / l, z: -gz / l };
   };
+
+  // ---- rideability checks (generated tracks only)
+  const check = { ok: true, why: '' };
+  if (biome !== 'test') {
+    const fail = (w) => { check.ok = false; check.why = w; };
+    if (total < 950 || total > 2100) fail(`length ${total.toFixed(0)} m`);
+    const jumpy = (sv) => { const sg = segs[SEG[clamp(Math.round(sv / ds), 0, NS - 1)]]; return sg.feat && sg.feat !== 'bumps' && sg.feat !== 'rockslab' && sg.feat !== 'innerRocks'; };
+    for (let sv = 2; sv < total - 2 && check.ok; sv += 1) {
+      if (jumpy(sv) || jumpy(sv + 1)) continue;
+      const a = toWorld(sv, 0), b = toWorld(sv + 1, 0), g = (h(b.x, b.z) - h(a.x, a.z));
+      if (g < -0.45 || g > 0.25) fail(`slope ${g.toFixed(2)} at ${sv.toFixed(0)} m`);
+    }
+    for (let i = 0; i < NS && check.ok; i += 20) for (let j = i + 240; j < NS; j += 20)          // trail never comes back near itself
+      if ((X[i] - X[j]) ** 2 + (Z[i] - Z[j]) ** 2 < 18 * 18) { fail(`trail overlaps itself at ${S[i].toFixed(0)} m`); break; }
+  }
+
   const sections = segs.filter(sg => sg.name).map(sg => ({ name: sg.name, s: sg.s0 }));
   return {
-    h, normal, surface: (px, pz) => SF[idx(px, pz)], trackDist: (px, pz) => TD[idx(px, pz)] / 20,
-    sampleAt, toWorld, elev, total, segs, sections, rocks, roots, bounds: { minX, maxX, minZ, maxZ }, res, nx, nz,
-    centerline: { S, X, Z, PSI }, buildMs: Date.now() - t0,
+    h, normal, surface: (px, pz) => lookup(px, pz, (t, id) => t.SF[id], B.off), trackDist: (px, pz) => lookup(px, pz, (t, id) => t.TD[id], 255) / 20,
+    farDist: (px, pz) => cbil(CD, px, pz),
+    sampleAt, toWorld, elev, total, segs, sections, rocks, roots, bounds: { minX, maxX, minZ, maxZ }, res, biome, seed, check, offSurf: B.off,
+    tileCount: tiles.size, centerline: { S, X, Z, PSI }, buildMs: Date.now() - t0,
   };
 }

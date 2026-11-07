@@ -25,22 +25,96 @@ kbd { font: 500 11px var(--mono); background: rgba(255,255,255,0.14); border-rad
 #telemetry { bottom: calc(12px + env(safe-area-inset-bottom, 0px)); right: max(12px, env(safe-area-inset-right, 0px)); }
 #telemetry .lg { display: flex; gap: 12px; font-size: 11px; color: var(--dim); margin-bottom: 4px; } .lg i { display: inline-block; width: 10px; height: 3px; vertical-align: middle; margin-right: 4px; }
 #graph { width: 300px; height: 90px; display: block; }
-#loading { position: fixed; inset: 0; display: grid; place-items: center; background: #0d120f; font: 600 16px var(--mono); letter-spacing: 0.1em; }
+#loading { position: fixed; inset: 0; display: grid; place-items: center; align-content: center; gap: 14px; background: radial-gradient(ellipse at 50% 40%, #1c2a22, #0a0f0c 70%); font: 600 15px var(--mono); letter-spacing: 0.14em; z-index: 30; }
+#loading .spin { width: 46px; height: 46px; border-radius: 50%; border: 5px dotted var(--orange); animation: spin 1.1s linear infinite; justify-self: center; }
+@keyframes spin { to { transform: rotate(360deg); } }
+/* ---- menus */
+:root { --orange: #ff6a1a; --cream: #f4efe6; --display: "Barlow Condensed", "Barlow", system-ui, sans-serif; }
+.screen { position: fixed; inset: 0; z-index: 20; display: grid; place-items: center; align-content: center; gap: 28px; padding: 24px max(16px, env(safe-area-inset-right, 0px)) 24px max(16px, env(safe-area-inset-left, 0px));
+  background: radial-gradient(ellipse at 50% 120%, rgba(255,106,26,0.18), transparent 55%), linear-gradient(180deg, #0c1411 0%, #13201a 55%, #0a0f0c 100%); overflow-y: auto; }
+.screen::before { content: ""; position: absolute; inset: auto 0 0 0; height: 46%; pointer-events: none; opacity: 0.55;
+  background: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 1200 400' preserveAspectRatio='none'%3E%3Cpath d='M0 260 L140 150 L230 210 L360 90 L470 190 L560 130 L700 240 L820 120 L930 200 L1040 140 L1200 230 L1200 400 L0 400Z' fill='%23182a20'/%3E%3Cpath d='M0 320 L180 230 L300 290 L430 210 L600 300 L760 220 L900 290 L1060 240 L1200 300 L1200 400 L0 400Z' fill='%230f1a14'/%3E%3C/svg%3E") bottom / 100% 100% no-repeat; }
+.logo { position: relative; display: grid; justify-items: center; gap: 4px; animation: rise .7s cubic-bezier(.2,.8,.2,1) both; }
+.logo svg { width: min(560px, 90vw); height: auto; overflow: visible; }
+.logo .tag { font: 600 13px var(--mono); letter-spacing: 0.32em; color: var(--dim); text-transform: uppercase; }
+@keyframes rise { from { opacity: 0; transform: translateY(18px); } }
+.btn { position: relative; font: 800 italic 30px/1 var(--display); letter-spacing: 0.08em; color: #160a02; background: var(--orange); border: 0; border-radius: 4px; padding: 18px 58px 16px;
+  cursor: pointer; clip-path: polygon(6% 0, 100% 0, 94% 100%, 0 100%); transition: transform .15s ease, filter .15s ease, box-shadow .15s ease; box-shadow: 0 10px 30px rgba(255,106,26,0.35); }
+.btn:hover { transform: translateY(-2px) scale(1.03); filter: brightness(1.08); }
+.btn:active { transform: translateY(1px) scale(0.97); filter: brightness(0.95); }
+.btn:focus-visible { outline: 3px solid var(--cream); outline-offset: 4px; }
+.btn[disabled] { opacity: 0.35; cursor: not-allowed; transform: none; filter: grayscale(0.6); }
+.btn.pulse { animation: pulse 2.2s ease-in-out infinite; }
+@keyframes pulse { 50% { box-shadow: 0 10px 44px rgba(255,106,26,0.6); } }
+.btn.ghost { background: transparent; color: var(--cream); box-shadow: none; font-size: 18px; padding: 12px 26px; border: 2px solid rgba(244,239,230,0.35); clip-path: none; }
+.screen h2 { font: 800 italic 38px/1 var(--display); letter-spacing: 0.06em; margin: 0; text-transform: uppercase; position: relative; }
+.screen h2 small { display: block; font: 600 12px var(--mono); letter-spacing: 0.28em; color: var(--dim); margin-top: 8px; font-style: normal; }
+.cards { position: relative; display: grid; grid-template-columns: repeat(3, minmax(0, 260px)); gap: 18px; }
+.card { position: relative; aspect-ratio: 3 / 4; border-radius: 10px; overflow: hidden; cursor: pointer; border: 3px solid transparent; background: #111; padding: 0; text-align: left; color: var(--cream);
+  transition: transform .2s ease, border-color .2s ease, box-shadow .2s ease; box-shadow: 0 12px 30px rgba(0,0,0,0.45); }
+.card svg { position: absolute; inset: 0; width: 100%; height: 100%; }
+.card:hover { transform: translateY(-4px); }
+.card.sel { border-color: var(--orange); transform: translateY(-6px) scale(1.02); box-shadow: 0 16px 40px rgba(255,106,26,0.35); }
+.card .lbl { position: absolute; left: 0; right: 0; bottom: 0; padding: 18px 16px 16px; background: linear-gradient(transparent, rgba(0,0,0,0.75)); }
+.card .lbl b { display: block; font: 800 italic 34px/1 var(--display); letter-spacing: 0.06em; }
+.card .lbl span { font-size: 12.5px; color: rgba(244,239,230,0.82); }
+.card .tick { position: absolute; top: 12px; right: 12px; width: 30px; height: 30px; border-radius: 50%; background: var(--orange); color: #160a02; display: grid; place-items: center; font: 800 18px var(--sans); opacity: 0; transform: scale(.5); transition: .2s; }
+.card.sel .tick { opacity: 1; transform: none; }
+.row2 { position: relative; display: flex; gap: 16px; align-items: center; flex-wrap: wrap; justify-content: center; }
+#finish { z-index: 25; background: rgba(8,12,10,0.72); backdrop-filter: blur(4px); }
+#finish .time { font: 800 italic 84px/1 var(--display); color: var(--orange); position: relative; }
+#progress { top: calc(12px + env(safe-area-inset-top, 0px)); left: 50%; transform: translateX(-50%); width: min(420px, 60vw); display: grid; gap: 6px; text-align: center; }
+#progress .clock { font: 600 26px/1 var(--mono); } #progress .bar i { background: var(--orange); }
+#menuBtn { top: calc(12px + env(safe-area-inset-top, 0px)); right: max(12px, env(safe-area-inset-right, 0px)); cursor: pointer; color: var(--ink); border: 0; font: 600 12px var(--mono); letter-spacing: 0.1em; }
+@media (max-width: 760px) { .cards { grid-template-columns: 1fr; width: min(320px, 100%); } .card { aspect-ratio: 16 / 9; } }
 @media (max-width: 700px) { #help, #telemetry { display: none; } #stats { width: auto; right: 12px; } }
 </style>
-<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Barlow:wght@400;600;700&family=JetBrains+Mono:wght@500;600&display=swap">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Barlow:wght@400;600;700&family=Barlow+Condensed:ital,wght@1,700;1,800;1,900&family=JetBrains+Mono:wght@500;600&display=swap">
 <canvas id="view"></canvas>
+<div id="hud" hidden>
 <div id="stats" class="panel"></div>
+<div id="progress" class="panel"><div class="clock" id="clock">0:00.0</div><span class="bar"><i id="prog" style="width:0%"></i></span><span class="cam" id="trackname"></span></div>
+<button id="menuBtn" class="panel">MENU <kbd>Esc</kbd></button>
 <div id="help" class="panel">
-  <h2>DailyMTB · Physics test track</h2>
+  <h2 id="helpTitle">DailyMTB</h2>
   <div><kbd>W</kbd> pedal · <kbd>S</kbd> rear brake · <kbd>Space</kbd> front brake · <kbd>A</kbd>/<kbd>D</kbd> steer</div>
-  <div><kbd>↑</kbd>/<kbd>↓</kbd> weight fore/aft · <kbd>←</kbd>/<kbd>→</kbd> lean / air tilt · <kbd>R</kbd> restart section · <kbd>C</kbd> camera · <kbd>P</kbd> pause</div>
+  <div><kbd>↑</kbd>/<kbd>↓</kbd> weight fore/aft · <kbd>←</kbd>/<kbd>→</kbd> lean / air tilt · <kbd>R</kbd> restart section · <kbd>T</kbd> restart run · <kbd>C</kbd> camera · <kbd>P</kbd> pause</div>
   <ul id="sections"></ul>
 </div>
 <div id="telemetry" class="panel">
   <div class="lg"><span><i style="background:var(--fork)"></i>Fork travel</span><span><i style="background:var(--shock)"></i>Rear travel</span><span>last 5 s</span></div>
   <canvas id="graph" width="600" height="180"></canvas>
 </div>
-<div id="loading">BUILDING TRAIL…</div>
+</div>
+<div id="mainMenu" class="screen">
+  <div class="logo">
+    <svg viewBox="0 0 560 210" role="img" aria-label="DailyMTB">
+      <defs><linearGradient id="lg" x1="0" x2="0" y1="0" y2="1"><stop offset="0" stop-color="#ffb37a"/><stop offset="1" stop-color="#ff6a1a"/></linearGradient></defs>
+      <path d="M150 92 L222 18 L258 54 L282 30 L352 92" fill="none" stroke="#f4efe6" stroke-width="7" stroke-linejoin="round" stroke-linecap="round"/>
+      <path d="M206 34 L222 18 L238 34 L228 30 L222 38 L214 30 Z" fill="#f4efe6"/>
+      <path d="M118 104 C 210 60, 300 128, 440 70" fill="none" stroke="url(#lg)" stroke-width="5" stroke-dasharray="2 9" stroke-linecap="round"/>
+      <text x="280" y="176" text-anchor="middle" font-family="Barlow Condensed, Barlow, sans-serif" font-style="italic" font-weight="900" font-size="92" letter-spacing="2">
+        <tspan fill="#f4efe6">DAILY</tspan><tspan fill="url(#lg)">MTB</tspan></text>
+      <rect x="128" y="190" width="304" height="5" fill="#ff6a1a" transform="skewX(-20)"/>
+    </svg>
+    <div class="tag">New trail · every ride</div>
+  </div>
+  <button class="btn pulse" id="playBtn">PLAY</button>
+</div>
+<div id="biomeMenu" class="screen" hidden>
+  <h2>Choose your mountain<small>Each run is a brand-new 1–2 km downhill trail</small></h2>
+  <div class="cards">
+    <button class="card" data-biome="snow"><svg viewBox="0 0 300 400" preserveAspectRatio="xMidYMid slice"><defs><linearGradient id="s1" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#9fc0e0"/><stop offset="1" stop-color="#e9f1f8"/></linearGradient></defs><rect width="300" height="400" fill="url(#s1)"/><path d="M-10 250 L70 110 L120 180 L170 70 L250 200 L310 140 L310 400 L-10 400Z" fill="#c8d6e4"/><path d="M70 110 L88 142 L74 136 L60 150 Z M170 70 L192 110 L176 102 L160 118 L150 104 Z" fill="#fff"/><path d="M-10 300 L90 230 L180 290 L310 220 L310 400 L-10 400Z" fill="#f4f8fc"/><g fill="#24433a"><path d="M40 300 l14 -46 l14 46z"/><path d="M230 290 l12 -40 l12 40z"/><path d="M258 300 l10 -32 l10 32z"/></g><path d="M120 400 C 140 340, 220 330, 200 270" stroke="#b9c7d6" stroke-width="10" fill="none"/></svg><span class="tick">✓</span><span class="lbl"><b>SNOW</b><span>Alpine pines, open snowfields, icy patches</span></span></button>
+    <button class="card" data-biome="desert"><svg viewBox="0 0 300 400" preserveAspectRatio="xMidYMid slice"><defs><linearGradient id="d1" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#f2b46b"/><stop offset="1" stop-color="#f7dcae"/></linearGradient></defs><rect width="300" height="400" fill="url(#d1)"/><circle cx="220" cy="90" r="34" fill="#fff1c9"/><path d="M-10 220 L40 220 L50 160 L120 160 L130 220 L200 220 L215 180 L260 180 L270 230 L310 230 L310 400 L-10 400Z" fill="#c4743f"/><path d="M-10 290 C 80 250, 160 300, 310 260 L310 400 L-10 400Z" fill="#e0a565"/><g fill="#4f6b3a"><rect x="58" y="270" width="10" height="46" rx="5"/><rect x="48" y="282" width="8" height="18" rx="4"/><rect x="70" y="276" width="8" height="20" rx="4"/><rect x="236" y="250" width="8" height="34" rx="4"/></g><path d="M100 400 C 130 350, 210 340, 180 290" stroke="#b07a4c" stroke-width="10" fill="none"/></svg><span class="tick">✓</span><span class="lbl"><b>DESERT</b><span>Sandstone ridges, drops, fast dusty lines</span></span></button>
+    <button class="card" data-biome="forest"><svg viewBox="0 0 300 400" preserveAspectRatio="xMidYMid slice"><defs><linearGradient id="f1" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#8fb6c9"/><stop offset="1" stop-color="#c7dbc4"/></linearGradient></defs><rect width="300" height="400" fill="url(#f1)"/><path d="M-10 230 L80 150 L150 200 L230 130 L310 190 L310 400 L-10 400Z" fill="#3f6247"/><g fill="#1f3b2a"><path d="M20 320 l22 -90 l22 90z"/><path d="M60 330 l18 -70 l18 70z"/><path d="M200 320 l24 -96 l24 96z"/><path d="M246 330 l18 -74 l18 74z"/><path d="M150 300 l14 -52 l14 52z"/></g><path d="M-10 330 C 80 300, 200 340, 310 310 L310 400 L-10 400Z" fill="#2c4a30"/><path d="M110 400 C 140 350, 200 350, 170 300" stroke="#6b4a2c" stroke-width="10" fill="none"/></svg><span class="tick">✓</span><span class="lbl"><b>FOREST</b><span>Roots, berms, rock gardens, tight woods</span></span></button>
+  </div>
+  <div class="row2"><button class="btn ghost" id="backBtn">BACK</button><button class="btn" id="genBtn" disabled>GENERATE TRACK</button></div>
+</div>
+<div id="finish" class="screen" hidden>
+  <h2>Finish<small id="finishInfo"></small></h2>
+  <div class="time" id="finishTime">0:00.0</div>
+  <div class="row2"><button class="btn ghost" id="menuBtn2">MENU</button><button class="btn ghost" id="newBtn">NEW TRACK</button><button class="btn" id="againBtn">RIDE AGAIN</button></div>
+</div>
+<div id="loading" hidden><div class="spin"></div><div id="loadText">GENERATING TRAIL…</div></div>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
 <script type="module" src="src/main.js"></script>
