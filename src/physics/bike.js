@@ -59,7 +59,7 @@ export class Bike {
     this.mounted = true; this.pr = this.p.add(this.q.rot(ANCHOR)); this.vr = this.v; this.torsoOff = new V();
     this.sF = G.FORK.sag; this.sFd = 0; this.th = 0; this.thd = 0;
     this.wF = speed / R; this.wR = speed / R; this.steer = 0; this.crank = Math.PI / 2; this.cassette = 0; this.gear = 0; this.chainPos = 0;
-    this.leanT = 0; this.aPrev = new V(); this.inp = { thr: 0, bF: 0, bR: 0, steer: 0, pitch: 0 };
+    this.leanT = 0; this.aPrev = new V(); this.inp = { thr: 0, bF: 0, bR: 0, steer: 0, pitch: 0, lean: 0 };
     this.lrF = 0; this.assist = this.assist || new Assist(); this.assist.reset(); this.assistT = new V(); this.lastAir = 0;
     this.crashed = false; this.cF = null; this.cR = null; this.air = 0; this.rim = 0; this.bottomF = 0; this.bottomR = 0; this.time = 0;
   }
@@ -103,6 +103,7 @@ export class Bike {
     const ip = this.inp, ap = (cur, tgt, rate) => cur + clamp(tgt - cur, -rate * dt, rate * dt);
     ip.thr = ap(ip.thr, keys.w ? 1 : 0, 4); ip.bR = ap(ip.bR, keys.s ? 1 : 0, 8); ip.bF = ap(ip.bF, keys.space ? 1 : 0, 8);
     ip.steer = ap(ip.steer, keys.steer ?? ((keys.d ? 1 : 0) - (keys.a ? 1 : 0)), ASSIST.inputRate); ip.pitch = ap(ip.pitch, keys.pitch ?? ((keys.down ? 1 : 0) - (keys.up ? 1 : 0)), 6);
+    ip.lean = ap(ip.lean, keys.lean ?? ((keys.right ? 1 : 0) - (keys.left ? 1 : 0)), 3);   // ←/→ rider body lean
 
     const q = this.q, fwd = q.rot(X), up = q.rot(Y), right = q.rot(Z);
     const fh = new V(fwd.x, 0, fwd.z).norm(), rh = new V(-fh.z, 0, fh.x);
@@ -115,8 +116,13 @@ export class Bike {
     const h = 0.97, Ir = SYS_ROLL_I + MASS * h * h, wn = ASSIST.leanBandwidth, zeta = 0.9, vabs = Math.max(Math.abs(vf), 0.1);
     if (!this.cF) target = this.steer * (1 - 8 * dt);   // front wheel unloaded: steering does nothing, so straighten the bars for touchdown
     else if (vf > 1.2) {
-      const aLat = ip.steer * maxLatAccel(vf);
-      this.leanT = ap(this.leanT, Math.atan(aLat / GRAV), ASSIST.leanRate); const leanT = this.leanT;
+      const aLat = ip.steer * maxLatAccel(vf);   // (←/→ adds extra lean below)
+      this.leanT = ap(this.leanT, Math.atan(aLat / GRAV), ASSIST.leanRate); const nb = this.track.normal(this.p.x, this.p.z), bank = Math.atan2(nb.x * rh.x + nb.z * rh.z, nb.y);   // + = surface tilted down to the right
+      // ←/→: rider tips the bike further over (balance handled by the steering), but only as far as the grip
+      // allows: ~35° on flat ground, more on a berm that leans the same way
+      // ←/→ tips the bike over a bit more, using only the lean margin the turn hasn't already used up
+      const margin = clamp(1 - Math.abs(this.leanT) / (0.62 + 0.4 * Math.max(0, Math.sign(this.leanT) * bank)), 0, 1);
+      const leanT = this.leanT + 0.28 * ip.lean * (Math.sign(ip.lean) === Math.sign(this.leanT) || Math.abs(this.leanT) < 0.05 ? margin : 1);
       const a = MASS * h * vf * vf * Math.sin(G.HEAD_ANGLE) / G.WHEELBASE;
       const Kp = Math.min(5, (Ir * wn * wn + MASS * GRAV * h) / a), Kd = Math.min(1.2, 2 * zeta * wn * Ir / a);
       const ff = Math.atan(G.WHEELBASE * Math.tan(leanT) * GRAV / (vf * vf)) / Math.sin(G.HEAD_ANGLE);
@@ -216,6 +222,15 @@ export class Bike {
     }
     for (const e of ext) { F = F.add(e.f); T = T.add(e.p.sub(this.p).cross(e.f)); if (e.t) T = T.add(e.t); }
 
+    // --- ←/→ body lean. On the ground the rider tips the bike over (on top of what the steering wants);
+    // leaning into a banked/committed turn lets the rider pump it for speed. In the air it only rolls the
+    // bike + rider (a torque never changes where the centre of mass flies) and fades back when released.
+    if (!this.crashed && Math.abs(ip.lean) > 0.01) {
+      if (grounded) {
+        const into = Math.sign(ip.lean) === Math.sign(lean) ? Math.min(1, Math.abs(lean) / 0.35) : 0;
+        if (vf > 2 && into > 0) F = F.add(fh.mul(110 * Math.abs(ip.lean) * into * clamp(1.6 - Math.abs(lean) / 0.5, 0, 1)));   // no extra drive when already at the grip limit   // pumping the turn
+      }
+    }
     // --- low-speed foot-dab balance (a foot touching the ground), external
     const dab = grounded ? clamp((3 - vf) / 2, 0, 1) : 0;
     if (dab > 0 && !this.crashed) T = T.add(fh.mul(-dab * (1800 * lean + 400 * leanRate)));

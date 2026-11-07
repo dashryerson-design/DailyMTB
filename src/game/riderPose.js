@@ -27,6 +27,7 @@ export class RiderPose {
     s.brake = ease(s.brake, Math.min(1, ip.bF + 0.6 * ip.bR) * Math.min(1, spd / 3), 6, dt);
     s.accel = ease(s.accel, ip.thr, 4, dt);
     s.corner = ease(s.corner, clamp(b.lean || 0, -0.8, 0.8), 8, dt);
+    s.side = ease(s.side ?? 0, ip.lean || 0, 7, dt);
     s.air = ease(s.air, air ? 1 : 0, 6, dt);
     if (!air && this.wasAir && b.lastAir > 0.15) s.land = Math.min(1, 0.4 + b.lastAir);
     this.wasAir = air; s.land = Math.max(0, s.land - dt * 2.2);
@@ -35,7 +36,7 @@ export class RiderPose {
     const tOff = b.torsoOff || new V();
     let hx = -0.23 + 0.07 * s.stand - 0.13 * s.brake + 0.04 * s.accel + clamp(tOff.x, -0.2, 0.2);
     let hy = 0.785 + 0.095 * s.stand + 0.05 * s.air - 0.13 * s.land + clamp(tOff.y, -0.12, 0.06);
-    const hz = clamp(tOff.z, -0.05, 0.05) - 0.05 * s.corner;
+    const hz = clamp(tOff.z, -0.05, 0.05) - 0.05 * s.corner + 0.09 * s.side;
     // never further than the legs can reach to either pedal
     const reach = (SEG.thigh + SEG.shin) * 0.97;
     for (const sd of [-1, 1]) { const pd = G.pedalAt(b.crank, sd), ax = pd[0] - 0.04, ay = pd[1] + 0.075;
@@ -43,7 +44,7 @@ export class RiderPose {
     const H = new V(hx, hy, hz);
     // ---- torso: forward lean angle from the posture, a little extra inward lean in corners
     const fwdLean = 0.62 + 0.25 * s.stand + 0.12 * s.accel - 0.2 * s.brake + 0.15 * s.land - 0.1 * s.air;
-    const tilt = -0.25 * s.corner;                                       // upper body drops into the turn
+    const tilt = -0.25 * s.corner + 0.3 * s.side;                                       // upper body drops into the turn
     const dir = (a, len) => new V(Math.sin(a) * len, Math.cos(a) * len * Math.cos(tilt), Math.cos(a) * len * Math.sin(tilt));
     const spine = H.add(dir(fwdLean * 0.55, SEG.lumbar));
     let neck = spine.add(dir(fwdLean, SEG.thorax));
@@ -57,7 +58,8 @@ export class RiderPose {
     const wUp = b.q.inv(new V(0, 1, 0)), headUp = new V(0.35, 1, 0).norm().mul(0.5).add(wUp.mul(0.5)).norm();
     const head = neck.add(headUp.mul(SEG.neck)).add(new V(0.06, 0, 0));
     const P = new Array(17);
-    P[J.hipL] = H.add(new V(0, 0, -SEG.hipW)); P[J.hipR] = H.add(new V(0, 0, SEG.hipW));
+    const tw = 0.35 * s.side;   // hips turn toward the lean
+    P[J.hipL] = H.add(new V(SEG.hipW * Math.sin(tw), 0, -SEG.hipW * Math.cos(tw))); P[J.hipR] = H.add(new V(-SEG.hipW * Math.sin(tw), 0, SEG.hipW * Math.cos(tw)));
     P[J.spine] = spine; P[J.neck] = neck; P[J.head] = head;
     P[J.shL] = neck.add(new V(0, -0.03, -SEG.shW)); P[J.shR] = neck.add(new V(0, -0.03, SEG.shW));
     for (const [sd, k, gi] of [[-1, 'L', 0], [1, 'R', 1]]) {

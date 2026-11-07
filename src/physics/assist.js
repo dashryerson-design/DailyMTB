@@ -36,7 +36,7 @@ export class Assist {
       // -- upright: compare lean with the lean the current turn actually needs (from measured yaw rate);
       //    only the unexplained part is corrected, so committed corners and berms are left alone
       const needed = Math.atan(clamp(-v * yawRate / 9.81, -1.2, 1.2));          // yaw right is -w.y
-      const target = Math.abs(steerIn) > 0.05 ? b.leanT * 0.5 + needed * 0.5 : needed;
+      const target = (Math.abs(steerIn) > 0.05 ? b.leanT * 0.5 + needed * 0.5 : needed) + 0.3 * b.inp.lean;   // deliberate ←/→ lean is not 'unexplained'
       // at speed the steering balance already does the work: assist only for clearly unexplained lean;
       // below ~5 m/s (where steering can't balance) it becomes the main helper
       const slow = clamp((5 - v) / 4, 0, 1);
@@ -66,8 +66,8 @@ export class Assist {
         const pr = w.dot(ctx.right);
         const tp = -A.landingAlign * urg * (1 - Math.min(1, Math.abs(b.inp.pitch))) *   // player's own pitch input takes priority
            (650 * pe + 110 * pr * (Math.abs(pe) > 0 ? 1 : 0.3));
-        const re = deadband(lean - L.bank, 0.07);
-        const tr = -A.landingRoll * urg * (650 * re + 150 * leanRate);
+        const re = deadband(lean - L.bank - 0.35 * b.inp.lean, 0.07);   // ←/→ holds a mid-air tilt; released = back to level
+        const tr = -A.landingRoll * Math.max(urg, 0.7 * Math.abs(b.inp.lean)) * (650 * re + 150 * leanRate);
         T = T.add(ctx.right.mul(tp)).add(fh.mul(tr)).add(new V(0, -A.landingRoll * 20 * yawRate, 0));
         info.landP = tp; info.landR = tr;
       }

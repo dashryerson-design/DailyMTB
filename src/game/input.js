@@ -1,9 +1,9 @@
 // Keyboard state. W pedal, S rear brake, Space front brake, A/D steer, arrows = rider weight fore/aft.
 export class Input {
   constructor() {
-    this.k = { w: false, a: false, s: false, d: false, space: false, up: false, down: false };
+    this.k = { w: false, a: false, s: false, d: false, space: false, up: false, down: false, left: false, right: false };
     this.handlers = {};
-    const map = { KeyW: 'w', KeyA: 'a', KeyS: 's', KeyD: 'd', Space: 'space', ArrowUp: 'up', ArrowDown: 'down' };
+    const map = { KeyW: 'w', KeyA: 'a', KeyS: 's', KeyD: 'd', Space: 'space', ArrowUp: 'up', ArrowDown: 'down', ArrowLeft: 'left', ArrowRight: 'right' };
     addEventListener('keydown', (e) => {
       if (map[e.code]) { this.k[map[e.code]] = true; e.preventDefault(); }
       else if (this.handlers[e.code] && !e.repeat) this.handlers[e.code](e);
