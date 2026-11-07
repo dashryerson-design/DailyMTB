@@ -116,20 +116,26 @@ export class Bike {
     const h = 0.97, Ir = SYS_ROLL_I + MASS * h * h, wn = ASSIST.leanBandwidth, zeta = 0.9, vabs = Math.max(Math.abs(vf), 0.1);
     if (!this.cF) target = this.steer * (1 - 8 * dt);   // front wheel unloaded: steering does nothing, so straighten the bars for touchdown
     else if (vf > 1.2) {
-      const aLat = ip.steer * maxLatAccel(vf);   // (←/→ adds extra lean below)
-      this.leanT = ap(this.leanT, Math.atan(aLat / GRAV), ASSIST.leanRate); const nb = this.track.normal(this.p.x, this.p.z), bank = Math.atan2(nb.x * rh.x + nb.z * rh.z, nb.y);   // + = surface tilted down to the right
+      const nb = this.track.normal(this.p.x, this.p.z), bank = Math.atan2(nb.x * rh.x + nb.z * rh.z, nb.y);   // + = surface tilted down to the right
+      // A/D + ←/→ the same way = committed carve: the rider throws the bike much further over and turns far
+      // tighter. How far depends on what the ground can hold: a little on the flat, a lot on a berm banked into the turn
+      const combo = Math.abs(ip.steer) > 0.1 && Math.sign(ip.lean) === Math.sign(ip.steer) ? Math.abs(ip.lean) : 0;
+      const bankIn = Math.max(0, Math.sign(ip.steer) * bank), aCarve = Math.min(vf * vf / 2.2, GRAV * Math.tan(Math.min(0.85, 0.66 + 0.4 * bankIn)));
+      this.carve = { combo, bankIn, dir: Math.sign(ip.steer) };
+      const aLat = ip.steer * (maxLatAccel(vf) + combo * Math.max(0, aCarve - maxLatAccel(vf)));
+      this.leanT = ap(this.leanT, Math.atan(aLat / GRAV), ASSIST.leanRate * (1 + 1.2 * combo));
       // ←/→: rider tips the bike further over (balance handled by the steering), but only as far as the grip
       // allows: ~35° on flat ground, more on a berm that leans the same way
       // ←/→ tips the bike over a bit more, using only the lean margin the turn hasn't already used up
       const margin = clamp(1 - Math.abs(this.leanT) / (0.62 + 0.4 * Math.max(0, Math.sign(this.leanT) * bank)), 0, 1);
-      const leanT = this.leanT + 0.28 * ip.lean * (Math.sign(ip.lean) === Math.sign(this.leanT) || Math.abs(this.leanT) < 0.05 ? margin : 1);
+      const leanT = combo > 0 ? this.leanT : this.leanT + 0.28 * ip.lean * (Math.sign(ip.lean) === Math.sign(this.leanT) || Math.abs(this.leanT) < 0.05 ? margin : 1);
       const a = MASS * h * vf * vf * Math.sin(G.HEAD_ANGLE) / G.WHEELBASE;
       const Kp = Math.min(5, (Ir * wn * wn + MASS * GRAV * h) / a), Kd = Math.min(1.2, 2 * zeta * wn * Ir / a);
       const ff = Math.atan(G.WHEELBASE * Math.tan(leanT) * GRAV / (vf * vf)) / Math.sin(G.HEAD_ANGLE);
       this.lrF = (this.lrF ?? 0) + (leanRate - (this.lrF ?? 0)) * Math.min(1, dt / 0.04);   // impacts make raw roll rate spiky
       target = ff + Kp * (lean - leanT) + Kd * clamp(this.lrF, -1.5, 1.5);
       this.leanTarget = leanT;
-    } else { target = ip.steer * 0.6; this.leanT = lean; }
+    } else { target = ip.steer * 0.6; this.leanT = lean; this.carve = null; }
     const maxSteer = 0.75 / (1 + 0.05 * vabs);
     this.steer = ap(this.steer, clamp(target, -maxSteer, maxSteer), ASSIST.steerRate);
 
@@ -230,6 +236,16 @@ export class Bike {
         const into = Math.sign(ip.lean) === Math.sign(lean) ? Math.min(1, Math.abs(lean) / 0.35) : 0;
         if (vf > 2 && into > 0) F = F.add(fh.mul(110 * Math.abs(ip.lean) * into * clamp(1.6 - Math.abs(lean) / 0.5, 0, 1)));   // no extra drive when already at the grip limit   // pumping the turn
       }
+    }
+    // --- carving a berm (A/D + ←/→ together): the banked wall pushes the bike round. Extra yaw rate plus the
+    // matching inward push (m·v·ω) so the velocity turns with the heading instead of sliding
+    const cv = this.carve;
+    if (cv && cv.combo > 0 && this.cF && this.cR && vf > 2 && !this.crashed) {
+      const strength = cv.combo * clamp(0.35 + cv.bankIn / 0.45, 0, 1.4);   // a little on the flat, lots on a real berm
+      const wx = 1.6 * strength, wNow = -this.w.y * cv.dir;               // extra yaw rate wanted (rad/s), current (+ = into turn)
+      const tq = (this.mounted ? 260 : 40) * clamp(wx - Math.max(0, wNow - Math.abs(vf * Math.tan(this.steer) / G.WHEELBASE)), -1, 1);
+      T = T.add(new V(0, -cv.dir * tq, 0));
+      F = F.add(rh.mul(cv.dir * (this.mounted ? 94 : 15) * vf * wx * 0.6));
     }
     // --- low-speed foot-dab balance (a foot touching the ground), external
     const dab = grounded ? clamp((3 - vf) / 2, 0, 1) : 0;
