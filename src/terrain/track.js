@@ -62,12 +62,12 @@ export const LAYOUT = [
 
 // ---- biomes: what the generator builds and what the ground is made of
 export const BIOMES = {
-  forest: { trail: SURF.DIRT, off: SURF.GRASS, grade: [0.07, 0.14], relief: 7, ridge: 4, valley: 0.09, roots: 1, rocks: 1, moss: true,
-    w: { straight: 1.2, turn: 2, berm: 3, bumps: 3, rollers: 1.5, table: 1, bigjump: 0.6, drop: 1, rockslab: 0.7, tech: 1.6 } },
-  snow: { trail: SURF.SNOW, off: SURF.SNOW, grade: [0.08, 0.16], relief: 14, ridge: 12, valley: 0.13, roots: 0, rocks: 0.5, ice: true,
-    w: { straight: 2.2, turn: 2.6, berm: 2.4, bumps: 0.9, rollers: 2, table: 1.6, bigjump: 1, drop: 0.6, rockslab: 0.5, tech: 0.8, ice: 0.5 } },
-  desert: { trail: SURF.DIRT, off: SURF.SAND, grade: [0.07, 0.15], relief: 10, ridge: 8, valley: 0.11, roots: 0, rocks: 1.3, sandstone: true,
-    w: { straight: 2.4, turn: 2, berm: 1.4, bumps: 1.6, rollers: 1.5, table: 1, bigjump: 1.2, drop: 1.8, rockslab: 2, tech: 1, sand: 0.6 } },
+  forest: { trail: SURF.DIRT, off: SURF.GRASS, grade: [0.1, 0.2], relief: 7, ridge: 4, valley: 0.09, roots: 1, rocks: 1, moss: true,
+    w: { straight: 1.6, turn: 3, berm: 3.4, bumps: 3, rollers: 1.5, table: 1, bigjump: 0.6, drop: 1, rockslab: 0.7, tech: 1.6 } },
+  snow: { trail: SURF.SNOW, off: SURF.SNOW, grade: [0.11, 0.22], relief: 14, ridge: 12, valley: 0.13, roots: 0, rocks: 0.5, ice: true,
+    w: { straight: 2, turn: 3.2, berm: 3, bumps: 0.9, rollers: 2, table: 1.6, bigjump: 1, drop: 0.6, rockslab: 0.5, tech: 0.8, ice: 0.5 } },
+  desert: { trail: SURF.DIRT, off: SURF.SAND, grade: [0.1, 0.2], relief: 10, ridge: 8, valley: 0.11, roots: 0, rocks: 1.3, sandstone: true,
+    w: { straight: 2.2, turn: 3, berm: 2.2, bumps: 1.6, rollers: 1.5, table: 1, bigjump: 1.2, drop: 1.8, rockslab: 2, tech: 1, sand: 0.6 } },
   test: { trail: SURF.DIRT, off: SURF.GRASS, grade: [0.1, 0.1], relief: 2, ridge: 0, valley: 0.05, roots: 1, rocks: 1, w: {} },
 };
 
@@ -75,8 +75,8 @@ const W = 1.7;        // tread half-width (3.4 m wide trail)
 
 // generate a downhill run: features are the proven shapes below, placed with rideability rules
 export function generateLayout(seed, biome) {
-  const r = rng(seed * 7919 + 13), B = BIOMES[biome], target = 1050 + r() * 850;
-  const out = [{ len: 30, name: 'Start', grade: 0.08 }];
+  const r = rng(seed * 7919 + 13), B = BIOMES[biome], target = 330 + r() * 520;   // 0.3-0.9 km runs
+  const out = [{ len: 16, name: 'Start', grade: 0.1 }];
   let heading = 0, s = 30, n = 0, last = '';
   const names = { berm: 'Berm', bumps: biome === 'forest' ? 'Root garden' : 'Rock garden', rollers: 'Rollers', table: 'Tabletop', bigjump: 'Big jump', drop: 'Drop', rockslab: biome === 'desert' ? 'Sandstone slabs' : 'Rock slab', tech: 'Tech turns', ice: 'Ice patch', sand: 'Sand wash' };
   const G = () => lerp(B.grade[0], B.grade[1], r());
@@ -87,14 +87,17 @@ export function generateLayout(seed, biome) {
     heading += sign * ang; return sign * ang / D2R;
   };
   const pick = () => { const e = Object.entries(B.w).filter(([k]) => k !== last); const tot = e.reduce((a, [, v]) => a + v, 0); let q = r() * tot; for (const [k, v] of e) if ((q -= v) <= 0) return k; return 'straight'; };
-  while (s < target - 70) {
+  while (s < target - 30) {
     const k = pick(); last = k; n++;
     const jump = k === 'rollers' || k === 'table' || k === 'bigjump' || k === 'drop';
-    if (jump) push(k === 'bigjump' ? { len: 38 + r() * 12, grade: 0.15 } : { len: 18 + r() * 14, grade: 0.11 + r() * 0.04 });   // run-in long/steep enough to arrive with speed                // run-in: straight, steady, fast enough
+    if (jump) push(k === 'bigjump' ? { len: 26 + r() * 8, grade: 0.2 } : { len: 12 + r() * 8, grade: 0.15 + r() * 0.04 });   // run-in long/steep enough to arrive with speed                // run-in: straight, steady, fast enough
     switch (k) {
-      case 'straight': push({ len: 25 + r() * 35, grade: G() * (r() < 0.25 ? 1.35 : 1) }); break;
-      case 'turn': { const R = 14 + r() * 16; push({ arc: R, ang: turnAng((40 + r() * 50) * D2R), grade: 0.06 + r() * 0.03 }); break; }
-      case 'berm': { const R = 9 + r() * 13, bank = clamp(48 - R * 1.1 + r() * 6, 24, 44); push({ arc: R, ang: turnAng((70 + r() * 70) * D2R), bank, grade: 0.07, name: names.berm }); break; }
+      case 'straight': {   // short and never flat: a chute, a rolling crest/dip pair, or a plain descent
+        const v = r(); if (v < 0.35) push({ len: 14 + r() * 12, grade: 0.22 + r() * 0.06, name: 'Steep chute' });
+        else if (v < 0.65) { push({ len: 10 + r() * 6, grade: 0.03 }); push({ len: 10 + r() * 8, grade: 0.24 }); }
+        else push({ len: 12 + r() * 14, grade: G() }); break; }
+      case 'turn': { const R = 11 + r() * 12; push({ arc: R, ang: turnAng((45 + r() * 50) * D2R), grade: 0.1 + r() * 0.06 }); push({ arc: 11 + r() * 10, ang: turnAng((40 + r() * 45) * D2R), grade: 0.1 + r() * 0.06 }); break; }
+      case 'berm': { const R = 9 + r() * 13, bank = clamp(48 - R * 1.1 + r() * 6, 24, 44); push({ arc: R, ang: turnAng((70 + r() * 70) * D2R), bank, grade: 0.1, name: names.berm }); push({ len: 5 + r() * 6, grade: 0.16 }); break; }
       case 'tech': { push({ arc: 8 + r() * 3, ang: turnAng((50 + r() * 35) * D2R), feat: 'innerRocks', grade: 0.06, name: names.tech }); push({ len: 6 + r() * 6, grade: 0.07 }); push({ arc: 8 + r() * 4, ang: turnAng((45 + r() * 35) * D2R), grade: 0.06 }); break; }
       case 'bumps': push({ len: 35 + r() * 35, feat: 'bumps', grade: G(), name: names.bumps, roots: B.roots, rocks: B.rocks }); break;
       case 'rockslab': push({ len: 15 + r() * 10, feat: 'rockslab', surf: SURF.ROCK, grade: G(), name: names.rockslab }); break;
@@ -102,9 +105,9 @@ export function generateLayout(seed, biome) {
       case 'sand': push({ len: 15 + r() * 12, surf: SURF.SAND, grade: 0.09, name: names.sand }); break;
       default: push({ len: { rollers: 32, table: 22, bigjump: 32, drop: 22 }[k], feat: k, grade: 0.1, name: names[k], safe: true });
     }
-    if (jump) push({ len: 16 + r() * 10, grade: 0.08 });                             // runout after every jump/drop
+    if (jump) push({ len: 12 + r() * 6, grade: 0.12 });                             // runout after every jump/drop
   }
-  push({ len: 45, name: 'Finish', grade: 0.05, finish: true });
+  push({ len: 28, name: 'Finish', grade: 0.1, finish: true });
   return out;
 }
 
@@ -180,7 +183,8 @@ export function buildTrack(seed = 7, opts = {}) {
     if (sg.feat === 'bigjump') events.push({ s: sg.s0 + 20, D: 2.0 });
     if (sg.feat === 'drop') events.push({ s: sg.s0 + 8.05, D: 1.1 });
   }
-  const offset = (s) => { let o = 0; for (const e of events) if (s >= e.s) o -= e.D * Math.max(0, Math.min(1, 1 - (s - e.s - 18) / 70)); return o; };
+  const keep = biome !== 'test';   // generated runs keep the height lost at jumps/drops (no creeping back uphill)
+  const offset = (s) => { let o = 0; for (const e of events) if (s >= e.s) o -= e.D * (keep ? 1 : Math.max(0, Math.min(1, 1 - (s - e.s - 18) / 70))); return o; };
   const elev = (s) => { const f = clamp(s / ds, 0, NS - 1), i = Math.min(Math.floor(f), NS - 2); return lerp(EL[i], EL[i + 1], f - i) + offset(s); };
 
   // ---- coarse mountain terrain (2 m) around the run: the land follows the trail's descent, rises into
@@ -189,16 +193,16 @@ export function buildTrack(seed = 7, opts = {}) {
   for (let i = 0; i < NS; i++) { minX = Math.min(minX, X[i]); maxX = Math.max(maxX, X[i]); minZ = Math.min(minZ, Z[i]); maxZ = Math.max(maxZ, Z[i]); }
   const M = biome === 'test' ? 40 : 70; minX -= M; minZ -= M; maxX += M; maxZ += M;
   const cr = 2, cnx = Math.ceil((maxX - minX) / cr) + 2, cnz = Math.ceil((maxZ - minZ) / cr) + 2, CH = new Float32Array(cnx * cnz), CD = new Float32Array(cnx * cnz);
-  const step = biome === 'test' ? 8 : 24;
+  const step = biome === 'test' ? 8 : 12, side = biome === 'test' ? 0 : (seed & 1 ? 1 : -1);   // which side of the trail the mountain rises on
   for (let j = 0; j < cnz; j++) for (let i = 0; i < cnx; i++) {
-    const px = minX + i * cr, pz = minZ + j * cr; let ws = 0, we = 0, dm = 1e9;
+    const px = minX + i * cr, pz = minZ + j * cr; let ws = 0, we = 0, dm = 1e9, sd = 0;
     for (let k = 0; k < NS; k += step) {
-      const dx = px - X[k], dz = pz - Z[k], d2 = dx * dx + dz * dz; if (d2 < dm) dm = d2;
+      const dx = px - X[k], dz = pz - Z[k], d2 = dx * dx + dz * dz; if (d2 < dm) { dm = d2; sd = -dx * Math.sin(PSI[k]) + dz * Math.cos(PSI[k]); }
       if (d2 < 9000) { const w = Math.exp(-d2 / 800); ws += w; we += w * EL[k]; }
     }
     const dist = Math.sqrt(dm), base = ws > 1e-9 ? we / ws : elev(S[NS - 1]), far = smooth((dist - 8) / 40);
     const ridged = 1 - Math.abs(noise(px / 110, pz / 110)), mtn = B.ridge * ridged * ridged * far;
-    CH[i + j * cnx] = base + B.valley * Math.min(dist, 90) + far * (B.relief * 0.35 * noise(px / 55 + 7, pz / 55) + mtn) + 0.4 * noise(px / 9 + 50, pz / 9);
+    CH[i + j * cnx] = base + B.valley * Math.min(dist, 90) + side * Math.sign(sd) * smooth((dist - 5) / 25) * Math.min(dist, 90) * 0.38 + far * (B.relief * 0.35 * noise(px / 55 + 7, pz / 55) + mtn) + 0.4 * noise(px / 9 + 50, pz / 9);
     CD[i + j * cnx] = dist;
   }
   const cbil = (A, px, pz) => {
@@ -308,7 +312,7 @@ export function buildTrack(seed = 7, opts = {}) {
   const check = { ok: true, why: '' };
   if (biome !== 'test') {
     const fail = (w) => { check.ok = false; check.why = w; };
-    if (total < 950 || total > 2100) fail(`length ${total.toFixed(0)} m`);
+    if (total < 280 || total > 950) fail(`length ${total.toFixed(0)} m`);
     const jumpy = (sv) => { const sg = segs[SEG[clamp(Math.round(sv / ds), 0, NS - 1)]]; return sg.feat && sg.feat !== 'bumps' && sg.feat !== 'rockslab' && sg.feat !== 'innerRocks'; };
     for (let sv = 2; sv < total - 2 && check.ok; sv += 1) {
       if (jumpy(sv) || jumpy(sv + 1)) continue;
