@@ -3,4 +3,4 @@
 2. Start every response with "Okay Lord Dash…"
 3. End every response with the direct link to the test Artifact.
    - Test build: index.html + src/**/*.js (republish to https://claude.ai/artifact/UcdcJeHBX43WvoHYQLbUTh)
-4. Physics validation: `node tests/sim.mjs`
+4. Physics validation: `node tests/sim.mjs` (bike/track) and `node tests/rider.mjs` (rider checks)

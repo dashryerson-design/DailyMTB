@@ -79,3 +79,14 @@ export function rearAt(th) {
 // leverage ratio (wheel vertical travel per unit shock stroke)
 export const leverage = (th) => { const r = rearAt(th); return -r.ty / r.dlen; };
 export { about, sub, add, mul, len, rot };
+
+// cockpit + contact points used by the rider (BB frame)
+export const STEM_A = add(HT_TOP, mul(DF, 0.03));
+export const BAR = add(STEM_A, [0.05, 0.012]);
+export const GRIP = add(BAR, [-0.03, 0.035]), GRIP_Z = 0.34;
+const ST_DIR = nrm(SEAT_TOP);
+export const POST_TOP = add(SEAT_TOP, mul(ST_DIR, 0.06));
+export const SADDLE_TOP = [POST_TOP[0], POST_TOP[1] + 0.055];
+export const CRANK = 0.165, PEDAL_Z = 0.12;
+// pedal centre for side s (+1 right, -1 left) at crank angle c
+export const pedalAt = (c, s) => [s * CRANK * Math.sin(-c), -s * CRANK * Math.cos(-c)];

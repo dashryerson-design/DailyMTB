@@ -7,15 +7,15 @@ import * as G from './geometry.js';
 import { AirFork, CoilShock } from './suspension.js';
 
 const GRAV = 9.81, g = new V(0, -GRAV, 0);
-// Rider = 80 kg: arms/legs (22 kg) move with the bike, torso+head (58 kg) is a separate mass held by the
-// legs and arms (anisotropic spring-damper in the bike frame) so the rider can absorb hits and shift weight.
-const LIMBS = { m: 22, com: [0.05, 0.45] }, FRAME = { m: 14, com: [0.25, 0.30] };
-export const TORSO = { m: 58, anchor: [0.02, 0.88], k: new V(12000, 9000, 50000), c: new V(1300, 1100, 3000), shift: 0.16 };
-const CM = LIMBS.m + FRAME.m;                     // chassis rigid-body mass
-export const MASS = CM + TORSO.m;                 // whole sprung system
-export const COM = [(LIMBS.m * LIMBS.com[0] + FRAME.m * FRAME.com[0]) / CM, (LIMBS.m * LIMBS.com[1] + FRAME.m * FRAME.com[1]) / CM];
-const SYS_X = (CM * COM[0] + TORSO.m * TORSO.anchor[0]) / MASS;
-const INERTIA = new V(2.2, 3.5, 4.5);            // chassis roll, yaw, pitch about its CoM (kg m^2)
+// The bike chassis is the frame (+fork crown, bars, cockpit). The rider is a separate articulated body
+// (physics/rider.js) that only touches the bike through grips, pedals and saddle (external forces here).
+const FRAME = { m: 15, com: [0.25, 0.30] };
+const CM = FRAME.m;
+export const COM = FRAME.com;
+export const MASS = 95;                           // design mass (bike + rider) for spring rates / rider balance gains
+const SYS_X = 0.06;                               // design x of combined CoM for static load split
+const INERTIA = new V(0.7, 1.8, 1.9);             // frame roll, yaw, pitch about its CoM (kg m^2)
+const SYS_ROLL_I = 12;                            // rider+bike roll inertia about CoM (for balance gains)
 const MU_F = 3.2, MU_R = 4.2;                    // unsprung masses (kg)
 const IW_F = 0.14, IW_R = 0.17;                  // wheel spin inertia
 const R = G.R_WHEEL;
@@ -27,8 +27,7 @@ const dfl = new V(G.DF[0], G.DF[1], 0), nfl = new V(G.NF[0], G.NF[1], 0), crownL
 const frontShare = (SYS_X - G.AXLE_R[0]) / G.WHEELBASE;
 const PHASES = 33;
 // rider/frame collision points (BB frame): head, shoulders, hips, bar ends, saddle, bottom bracket
-const BODY_PTS = [[0.55, 0.64, -0.4], [0.55, 0.64, 0.4], [-0.26, 0.8, 0], [0, -0.02, 0]].map(([x, y, z]) => ({ p: L(x, y, z) }));
-const ANCHOR = L(TORSO.anchor[0], TORSO.anchor[1]);
+const BODY_PTS = [[0.5, 0.66, -0.4], [0.5, 0.66, 0.4], [-0.22, 0.72, 0], [0, -0.02, 0]].map(([x, y, z]) => ({ p: L(x, y, z) }));
 
 export class Bike {
   constructor(track) {
@@ -47,9 +46,9 @@ export class Bike {
     const bbGround = 0.35 + 0.03;
     this.p = new V(p.x, Math.max(y0, y1) + bbGround, p.z).add(this.q.rot(new V(COM[0], COM[1], 0)));
     const f = this.q.rot(X);
-    this.v = f.mul(speed); this.pr = this.p.add(this.q.rot(ANCHOR)); this.vr = this.v; this.w = new V();
+    this.v = f.mul(speed); this.w = new V();
     this.sF = G.FORK.sag; this.sFd = 0; this.th = 0; this.thd = 0;
-    this.wF = speed / R; this.wR = speed / R; this.steer = 0; this.crank = 0; this.cassette = 0; this.gear = 0; this.chainPos = 0;
+    this.wF = speed / R; this.wR = speed / R; this.steer = 0; this.crank = Math.PI / 2; this.cassette = 0; this.gear = 0; this.chainPos = 0;
     this.leanT = 0; this.aPrev = new V(); this.inp = { thr: 0, bF: 0, bR: 0, steer: 0, pitch: 0 };
     this.crashed = false; this.cF = null; this.cR = null; this.air = 0; this.rim = 0; this.bottomF = 0; this.bottomR = 0; this.time = 0;
   }
@@ -87,7 +86,9 @@ export class Bike {
     return { p, n, pen, N, Fx, Fy, F: n.mul(N).add(l.mul(Fx)).add(lat.mul(Fy)), surf: sp, rim, crr: sp.crr, slip, vl };
   }
 
-  step(dt, keys) {
+  // ext: [{p: world point, f: world force}] from the rider (grips, pedals, saddle, muscle couples)
+  step(dt, keys, ext = []) {
+    if (this.crashed) keys = {};
     const ip = this.inp, ap = (cur, tgt, rate) => cur + clamp(tgt - cur, -rate * dt, rate * dt);
     ip.thr = ap(ip.thr, keys.w ? 1 : 0, 4); ip.bR = ap(ip.bR, keys.s ? 1 : 0, 8); ip.bF = ap(ip.bF, keys.space ? 1 : 0, 8);
     ip.steer = ap(ip.steer, keys.steer ?? ((keys.d ? 1 : 0) - (keys.a ? 1 : 0)), 3); ip.pitch = ap(ip.pitch, keys.pitch ?? ((keys.down ? 1 : 0) - (keys.up ? 1 : 0)), 6);
@@ -100,7 +101,7 @@ export class Bike {
 
     // --- rider: balance by steering (steer into the fall), countersteer to initiate lean
     let target;
-    const h = 0.97, Ir = INERTIA.x + MASS * h * h, wn = 7, zeta = 0.9, vabs = Math.max(Math.abs(vf), 0.1);
+    const h = 0.97, Ir = SYS_ROLL_I + MASS * h * h, wn = 7, zeta = 0.9, vabs = Math.max(Math.abs(vf), 0.1);
     if (!grounded) target = this.steer * (1 - 2 * dt);
     else if (vf > 1.2) {
       const aLat = ip.steer * Math.min(0.85 * GRAV, vf * vf / 4.5);
@@ -179,34 +180,21 @@ export class Bike {
 
     // --- body/frame contacts: penalty springs with friction (lets crashes happen without passing through)
     for (const bp of BODY_PTS) {
-      const r = q.rot(bp.p), wp = this.p.add(r), d = this.track.h(wp.x, wp.z) - wp.y;
+      const r = q.rot(bp.p), wp = this.p.add(r), d = Math.min(0.08, this.track.h(wp.x, wp.z) - wp.y);
       if (d <= 0) continue;
       const nn = this.track.normal(wp.x, wp.z), n = new V(nn.x, nn.y, nn.z), vp = this.v.add(this.w.cross(r)), vn = vp.dot(n);
       const Nn = Math.max(0, 40000 * d - 1500 * vn), vt = vp.sub(n.mul(vn)), vtl = vt.len();
       const f = n.mul(Nn).add(vtl > 1e-3 ? vt.mul(-0.6 * Nn / Math.max(vtl, 0.5)) : new V());
       F = F.add(f); T = T.add(r.cross(f));
     }
-    // torso / head hitting the ground = crash
-    for (const off of [0, 0.42]) {
-      const hp = this.pr.add(up.mul(off)), d = this.track.h(hp.x, hp.z) - (hp.y - 0.15);
-      if (d > 0) { const nn = this.track.normal(hp.x, hp.z), fn = Math.max(0, 30000 * d - 1200 * this.vr.y); this.vr = this.vr.add(new V(nn.x, nn.y, nn.z).mul(fn * dt / TORSO.m)).mul(1 - 3 * dt); this.crashed = true; }
-    }
+    // rider contact forces (hands on grips, feet on pedals, pelvis on saddle)
+    for (const e of ext) { F = F.add(e.f); T = T.add(e.p.sub(this.p).cross(e.f)); if (e.t) T = T.add(e.t); }
 
-    // --- torso on legs/arms: spring-damper between torso and its anchor on the bike (weight shift moves the anchor)
-    const rA = q.rot(ANCHOR.add(new V(ip.pitch * -TORSO.shift, 0, 0))), aW = this.p.add(rA), vA = this.v.add(this.w.cross(rA));
-    const dl = q.inv(this.pr.sub(aW)), vl = q.inv(this.vr.sub(vA)), K = TORSO.k, Cd = TORSO.c;
-    const fl = new V(-K.x * dl.x - Cd.x * vl.x, -K.y * dl.y - Cd.y * vl.y + TORSO.m * GRAV * Math.max(0.3, up.y), -K.z * dl.z - Cd.z * vl.z);
-    const fr = q.rot(fl);
-    this.vr = this.vr.add(fr.mul(dt / TORSO.m)).add(g.mul(dt)); this.pr = this.pr.add(this.vr.mul(dt));
-    F = F.sub(fr); T = T.add(rA.cross(fr.mul(-1)));
-    this.torsoOff = dl;
-
-    // --- rider inputs on the chassis: fore/aft body shift (pitch), low-speed foot-dab balance
-    T = T.add(right.mul(ip.pitch * 90));
+    // --- low-speed foot-dab balance (a foot touching the ground), external
     const dab = grounded ? clamp((3 - vf) / 2, 0, 1) : 0;
-    if (dab > 0) T = T.add(fh.mul(-dab * (1800 * lean + 400 * leanRate)));
+    if (dab > 0 && !this.crashed) T = T.add(fh.mul(-dab * (1800 * lean + 400 * leanRate)));
     // airborne: rider uses body movement to keep the bike level in roll
-    if (!grounded) T = T.add(fh.mul(-(500 * lean + 120 * leanRate)));
+    if (!grounded && !this.crashed) T = T.add(fh.mul(-(300 * lean + 60 * leanRate)));
 
     // --- integrate chassis (rigid body with full inertia tensor in body frame)
     const acc = F.mul(1 / CM); this.aPrev = acc;

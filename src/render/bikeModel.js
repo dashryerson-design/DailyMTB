@@ -118,7 +118,7 @@ export class BikeModel {
     F.add(bolt(p3(G.PIVOT), 0.15, 0.011)); F.add(bolt(p3(G.ROCKER_P), 0.1)); F.add(bolt(p3(L.D), 0.06, 0.007));
     // seat post / dropper
     const stDir = p3(G.SEAT_TOP).normalize();
-    const postTop = p3(G.SEAT_TOP).addScaledVector(stDir, 0.16);
+    const postTop = p3(G.POST_TOP);
     F.add(tube(p3(G.SEAT_TOP).addScaledVector(stDir, -0.03), p3(G.SEAT_TOP).addScaledVector(stDir, 0.03), 0.019, MAT.black));
     F.add(tube(p3(G.SEAT_TOP), postTop, 0.0155, MAT.black));
     F.add(tube(p3(G.SEAT_TOP).addScaledVector(stDir, 0.025), p3(G.SEAT_TOP).addScaledVector(stDir, 0.045), 0.02, MAT.alloy));
@@ -226,23 +226,6 @@ export class BikeModel {
     this.nLinks = 120;
     this.chain = new T.InstancedMesh(new T.BoxGeometry(0.0118, 0.0055, 0.006), MAT.chain, this.nLinks); this.chain.castShadow = true; bb.add(this.chain);
 
-    // ---- rider
-    const RD = this.rider = new T.Group(); bb.add(RD);
-    const box = (w, d, m) => mesh(new T.BoxGeometry(w, 1, d), m);
-    this.torso = mesh(new T.CylinderGeometry(0.13, 0.11, 1, 14), MAT.jersey); this.torso.scale.z = 1; this.pelvis = mesh(new T.CylinderGeometry(0.1, 0.1, 0.3, 14), MAT.pants); this.pelvis.geometry.rotateX(Math.PI / 2);
-    this.head = new T.Group(); this.head.add(mesh(new T.SphereGeometry(0.125, 20, 14), MAT.helmet));
-    const chin = mesh(new T.TorusGeometry(0.1, 0.022, 8, 16, Math.PI), MAT.helmet); chin.rotation.set(Math.PI / 2, 0, Math.PI / 2); chin.position.set(0.04, -0.06, 0); this.head.add(chin);
-    const visor = mesh(new T.BoxGeometry(0.06, 0.012, 0.18), MAT.visor); visor.position.set(0.11, 0.06, 0); visor.rotation.z = -0.3; this.head.add(visor);
-    const gog = mesh(new T.BoxGeometry(0.03, 0.045, 0.16), MAT.visor); gog.position.set(0.11, 0.0, 0); this.head.add(gog);
-    RD.add(this.torso, this.pelvis, this.head);
-    this.limbs = {};
-    for (const s of ['L', 'R']) {
-      this.limbs[s] = {
-        thigh: cyl(0.058, MAT.pants, 14), shin: cyl(0.044, MAT.pants, 14), upper: cyl(0.042, MAT.jersey, 14), fore: cyl(0.035, MAT.jersey, 14),
-        shoe: mesh(new T.BoxGeometry(0.26, 0.07, 0.1), MAT.shoe), glove: mesh(new T.SphereGeometry(0.04, 10, 8), MAT.black),
-      };
-      Object.values(this.limbs[s]).forEach(o => RD.add(o));
-    }
     this._tmp = new T.Vector3();
   }
 
@@ -268,7 +251,6 @@ export class BikeModel {
     this.cranks.rotation.z = -b.crank; this.pedals.forEach(p => p.rotation.z = b.crank);
     this.cassette.rotation.z = -b.cassette;
     this.updateChain(b, th);
-    this.updateRider(b);
   }
 
   updateChain(b, th) {
@@ -295,31 +277,5 @@ export class BikeModel {
       this.chain.setMatrixAt(n, m.compose(pos, q, sc));
     }
     this.chain.instanceMatrix.needsUpdate = true;
-  }
-
-  updateRider(b) {
-    this.root.updateMatrixWorld(true);
-    const t = this.bb.worldToLocal(new T.Vector3(b.pr.x, b.pr.y, b.pr.z));
-    const hips = t.clone().add(v3(-0.13, -0.1)), sh = t.clone().add(v3(0.13, 0.23)), head = t.clone().add(v3(0.22, 0.42));
-    place(this.torso, hips.clone().add(v3(0.02, 0.04)), sh); this.pelvis.position.copy(hips);
-    
-    this.head.position.copy(head); this.head.rotation.z = -0.25;
-    this.steerG.updateMatrix();
-    const ik = (a, tgt, l1, l2, pole) => {
-      const d = tgt.clone().sub(a), dl = Math.min(d.length(), l1 + l2 - 1e-3), dn = d.clone().normalize();
-      const x = (l1 * l1 - l2 * l2 + dl * dl) / (2 * dl), h = Math.sqrt(Math.max(0, l1 * l1 - x * x));
-      const pp = pole.clone().sub(dn.clone().multiplyScalar(pole.dot(dn))).normalize();
-      return a.clone().addScaledVector(dn, x).addScaledVector(pp, h);
-    };
-    [['L', -1], ['R', 1]].forEach(([s, z], i) => {
-      const lb = this.limbs[s];
-      const pedal = this.pedals[i].getWorldPosition(new T.Vector3()); this.bb.worldToLocal(pedal); pedal.y += 0.03;
-      const hip = hips.clone().setZ(z * 0.1), knee = ik(hip, pedal, 0.46, 0.46, v3(1, 0.3, z * 0.15));
-      place(lb.thigh, hip, knee); place(lb.shin, knee, pedal);
-      lb.shoe.position.copy(pedal).add(v3(0.02, 0.015)); lb.shoe.rotation.set(0, 0, 0);
-      const grip = this.gripPts[i].clone().applyMatrix4(this.steerG.matrix), shd = sh.clone().setZ(z * 0.19);
-      const elbow = ik(shd, grip, 0.32, 0.32, v3(-0.4, -0.5, z * 0.8));
-      place(lb.upper, shd, elbow); place(lb.fore, elbow, grip); lb.glove.position.copy(grip);
-    });
   }
 }
