@@ -256,7 +256,8 @@ export function buildTrack(seed = 7, opts = {}) {
     const fx = (px - minX) / res, fz = (pz - minZ) / res, i = Math.floor(fx), j = Math.floor(fz), tx = fx - i, tz = fz - j;
     const t = tiles.get(key(i >> 6, j >> 6));
     if (t && (i & 63) < 63 && (j & 63) < 63) { const k = (i & 63) + (j & 63) * TS; return (t.H[k] * (1 - tx) + t.H[k + 1] * tx) * (1 - tz) + (t.H[k + TS] * (1 - tx) + t.H[k + TS + 1] * tx) * tz; }
-    if (!t && !tiles.get(key((i + 1) >> 6, (j + 1) >> 6))) return natural(px, pz);
+    // only fall back to the plain terrain when none of the four surrounding cells is in a detail tile
+    if (!t && !tiles.get(key((i + 1) >> 6, j >> 6)) && !tiles.get(key(i >> 6, (j + 1) >> 6)) && !tiles.get(key((i + 1) >> 6, (j + 1) >> 6))) return natural(px, pz);
     return (cellH(i, j) * (1 - tx) + cellH(i + 1, j) * tx) * (1 - tz) + (cellH(i, j + 1) * (1 - tx) + cellH(i + 1, j + 1) * tx) * tz;
   };
   const lookup = (px, pz, f, dflt) => { const i = Math.round((px - minX) / res), j = Math.round((pz - minZ) / res), t = tiles.get(key(i >> 6, j >> 6)); return t ? f(t, (i & 63) + (j & 63) * TS) : dflt; };
