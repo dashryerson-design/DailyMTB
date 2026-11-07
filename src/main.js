@@ -1,5 +1,6 @@
 import { buildTrack } from './terrain/track.js';
 import { RideSystem } from './physics/system.js';
+import { V, Q } from './core/math.js';
 import * as G from './physics/geometry.js';
 import { BikeModel } from './render/bikeModel.js';
 import { RiderModel } from './render/riderModel.js';
@@ -42,7 +43,7 @@ function start() {
     line(0, '#e3b448'); line(1, '#e8661c');
   }
 
-  let acc = 0, last = performance.now(), simBudget = 0;
+  let acc = 0, last = performance.now(), simBudget = 0, visLean = 0;
   function frame(now) {
     const dt = Math.min(0.05, (now - last) / 1000); last = now;
     if (!paused) {
@@ -52,7 +53,16 @@ function start() {
       simBudget = simBudget * 0.95 + (performance.now() - t0) * 0.05;
       hist.push([bike.sF / G.FORK.travel, bike.rearTravel / 0.18]); if (hist.length > 300) hist.shift();
     }
-    model.update(bike); riderModel.update({ x: sys.body(dt) }, bike);
+    // draw the bike + rider leaning relative to the riding surface: on a banked turn the bank is added on
+    // top of the lean (rolled about the tyre contact line, so the wheels stay on the berm)
+    visLean += ((bike.mounted && !bike.crashed ? bike.visBank || 0 : 0) - visLean) * Math.min(1, dt * 6);
+    let view = bike;
+    if (Math.abs(visLean) > 1e-3) {
+      const f = bike.q.rot(new V(1, 0, 0)), fh = new V(f.x, 0, f.z).norm(), rq = Q.axis(fh, visLean);
+      const gp = new V(bike.p.x, track.h(bike.p.x, bike.p.z), bike.p.z);
+      view = Object.create(bike); view.q = rq.mul(bike.q); view.p = gp.add(rq.rot(bike.p.sub(gp)));
+    }
+    model.update(view); riderModel.update({ x: sys.body(dt, view) }, view);
     rig.update(dt, bike);
     sun.position.set(bike.p.x + 30, bike.p.y + 60, bike.p.z + 20); sun.target.position.set(bike.p.x, bike.p.y, bike.p.z);
     renderer.render(scene, cam);
@@ -67,7 +77,7 @@ function start() {
       <div class="row"><span>Fork</span>${bar(f / G.FORK.travel)}<b>${(f * 1000).toFixed(0)} / 180 mm</b></div>
       <div class="row"><span>Rear wheel</span>${bar(rt / 0.18)}<b>${(rt * 1000).toFixed(0)} / 180 mm</b></div>
       <div class="row"><span>Shock shaft</span>${bar(xs / G.SHOCK.stroke)}<b>${(xs * 1000).toFixed(1)} / 63.5 mm</b></div>
-      <div class="row"><span>Lean</span><b>${(bike.lean * 57.3).toFixed(0)}°</b><span>Steer</span><b>${(bike.steer * 57.3).toFixed(0)}°</b></div>
+      <div class="row"><span>Lean</span><b>${((bike.lean + visLean) * 57.3).toFixed(0)}°</b><span>Steer</span><b>${(bike.steer * 57.3).toFixed(0)}°</b></div>
       <div class="row"><span>Gear</span><b>${G.RING_T}×${G.COGS[bike.gear]}</b><span>Surface</span><b>${c ? c.surf.name : 'Airborne'}</b></div>
       <div class="flags">${bike.air > 0.08 ? `<em>AIR ${bike.air.toFixed(2)} s</em>` : ''}${bike.bottomF > 0 ? '<em class="w">FORK BOTTOM-OUT</em>' : ''}${bike.bottomR > 0 ? '<em class="w">SHOCK BOTTOM-OUT</em>' : ''}${bike.rim > 0 ? '<em class="w">RIM STRIKE</em>' : ''}${bike.crashed ? '<em class="c">CRASHED · press R</em>' : ''}${bike.mounted && sys.pose.s.stand < 0.5 ? '<em>SEATED</em>' : ''}${paused ? '<em>PAUSED</em>' : ''}</div>
       <div class="cam">Camera: ${CAM_MODES[rig.mode]} <kbd>C</kbd> · physics ${simBudget.toFixed(1)} ms/frame</div>`;

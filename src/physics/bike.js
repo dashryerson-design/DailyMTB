@@ -60,7 +60,7 @@ export class Bike {
     this.sF = G.FORK.sag; this.sFd = 0; this.th = 0; this.thd = 0;
     this.wF = speed / R; this.wR = speed / R; this.steer = 0; this.crank = Math.PI / 2; this.cassette = 0; this.gear = 0; this.chainPos = 0;
     this.leanT = 0; this.aPrev = new V(); this.inp = { thr: 0, bF: 0, bR: 0, steer: 0, pitch: 0, lean: 0 };
-    this.lrF = 0; this.assist = this.assist || new Assist(); this.assist.reset(); this.assistT = new V(); this.lastAir = 0;
+    this.lrF = 0; this.bankF = 0; this.assist = this.assist || new Assist(); this.assist.reset(); this.assistT = new V(); this.lastAir = 0;
     this.crashed = false; this.cF = null; this.cR = null; this.air = 0; this.rim = 0; this.bottomF = 0; this.bottomR = 0; this.time = 0;
   }
 
@@ -114,7 +114,7 @@ export class Bike {
     // --- rider: balance by steering (steer into the fall), countersteer to initiate lean
     let target;
     const h = 0.97, Ir = SYS_ROLL_I + MASS * h * h, wn = ASSIST.leanBandwidth, zeta = 0.9, vabs = Math.max(Math.abs(vf), 0.1);
-    if (!this.cF) target = this.steer * (1 - 8 * dt);   // front wheel unloaded: steering does nothing, so straighten the bars for touchdown
+    if (!this.cF) { target = this.steer * (1 - 8 * dt); this.visBank = 0; }   // front wheel unloaded: steering does nothing, so straighten the bars for touchdown
     else if (vf > 1.2) {
       const nb = this.track.normal(this.p.x, this.p.z), bank = Math.atan2(nb.x * rh.x + nb.z * rh.z, nb.y);   // + = surface tilted down to the right
       // A/D + ←/→ the same way = committed carve: the rider throws the bike much further over and turns far
@@ -128,14 +128,19 @@ export class Bike {
       // allows: ~35° on flat ground, more on a berm that leans the same way
       // ←/→ tips the bike over a bit more, using only the lean margin the turn hasn't already used up
       const margin = clamp(1 - Math.abs(this.leanT) / (0.85 + 0.5 * Math.max(0, Math.sign(this.leanT) * bank)), 0, 1);
-      const leanT = this.leanT + (combo > 0 ? 0.3 : 0.5) * ip.lean * (Math.sign(ip.lean) === Math.sign(this.leanT) || Math.abs(this.leanT) < 0.05 ? margin : 1);
+      // the bank this turn is ridden on (same side as the turn); used to draw the bike leaning relative to the
+      // surface. Physics balance stays in world terms, so it is NOT added to the balance target here.
+      this.bankF = (this.bankF ?? 0) + (bank - (this.bankF ?? 0)) * Math.min(1, dt / 0.15);
+      const turnSide = Math.abs(this.leanT) > 0.03 ? Math.sign(this.leanT) : Math.sign(ip.lean);
+      const bankAdd = Math.sign(this.bankF) === turnSide ? this.bankF : 0;
+      this.visBank = bankAdd; const leanT = this.leanT + (combo > 0 ? 0.3 : 0.5) * ip.lean * (Math.sign(ip.lean) === Math.sign(this.leanT) || Math.abs(this.leanT) < 0.05 ? margin : 1);
       const a = MASS * h * vf * vf * Math.sin(G.HEAD_ANGLE) / G.WHEELBASE;
       const Kp = Math.min(5, (Ir * wn * wn + MASS * GRAV * h) / a), Kd = Math.min(1.2, 2 * zeta * wn * Ir / a);
       const ff = Math.atan(G.WHEELBASE * Math.tan(leanT) * GRAV / (vf * vf)) / Math.sin(G.HEAD_ANGLE);
       this.lrF = (this.lrF ?? 0) + (leanRate - (this.lrF ?? 0)) * Math.min(1, dt / 0.04);   // impacts make raw roll rate spiky
       target = ff + Kp * (lean - leanT) + Kd * clamp(this.lrF, -1.5, 1.5);
       this.leanTarget = leanT;
-    } else { target = ip.steer * 0.6; this.leanT = lean; this.carve = null; }
+    } else { target = ip.steer * 0.6; this.leanT = lean; this.carve = null; this.visBank = 0; }
     const maxSteer = 0.75 / (1 + 0.05 * vabs);
     this.steer = ap(this.steer, clamp(target, -maxSteer, maxSteer), ASSIST.steerRate);
 

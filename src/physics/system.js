@@ -23,5 +23,5 @@ export class RideSystem {
     }
   }
   // joint positions for drawing
-  body(dt) { return this.bike.mounted ? this.pose.update(this.bike, dt).x : this.rider.x; }
+  body(dt, view) { return this.bike.mounted ? this.pose.update(view || this.bike, dt).x : this.rider.x; }
 }
