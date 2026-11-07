@@ -191,6 +191,28 @@ export class Rider {
       }
     }
 
+    // ---- crash muscles: a thrown rider is not a limp doll. Every joint is held toward the body shape it had
+    // when it came off (expressed in its parent segment's frame, so it is pure body tension, never pinned
+    // to the world), with damping on every bone. Tense at first (bracing), relaxing to a lower tone after.
+    if (this.crashed && this.restC) {
+      const tq = this.crashT = (this.crashT || 0) + dt, mt = 0.45 + 0.55 * Math.exp(-tq / 1.8);
+      const pf = this.pelvisFrame(x), cf = this.chestFrame(x), R = this.restC;
+      const motor = (i, target, k, c, cap, parents) => {
+        const vt = parents.reduce((a, p) => a.add(v[p]), new V()).mul(1 / parents.length);
+        let f = target.sub(x[i]).mul(k * mt).add(vt.sub(v[i]).mul(c)); const L = f.len(); if (L > cap) f = f.mul(cap / L);
+        madd(i, f); for (const p of parents) madd(p, f.mul(-1 / parents.length));
+      };
+      motor(J.neck, pf.toWorld(R.neck), 2600, 160, 1100, [J.hipL, J.hipR]);              // spine: strong
+      motor(J.head, cf.toWorld(R.head), 1300, 50, 300, [J.neck, J.spine]);               // neck
+      for (const k of ['L', 'R']) {
+        motor(J['elb' + k], cf.toWorld(R['elb' + k]), 700, 35, 260, [J['sh' + k]]);         // shoulder
+        motor(J['hand' + k], cf.toWorld(R['hand' + k]), 420, 22, 180, [J['elb' + k]]);      // elbow
+        motor(J['knee' + k], pf.toWorld(R['knee' + k]), 1100, 60, 450, [J['hip' + k]]);     // hip
+        motor(J['ank' + k], pf.toWorld(R['ank' + k]), 650, 32, 300, [J['knee' + k]]);      // knee
+        motor(J['toe' + k], pf.toWorld(R['toe' + k]), 160, 6, 60, [J['ank' + k]]);         // ankle
+      }
+      for (const [a2, c2, lo, hi] of this.C) if (lo === hi) { const dv = v[c2].sub(v[a2]).mul(12); madd(a2, dv); madd(c2, dv.mul(-1)); }
+    }
     // muscles are internal: zero net force by construction, but non-collinear pairs make a net couple.
     // Real joint torques react against the bike through the feet/hands, so pass that couple to the bike
     // (keeps rider+bike angular momentum exact). Detached, cancel it inside the body instead.
@@ -258,9 +280,24 @@ export class Rider {
   }
 
   // thrown off the bike: start the ragdoll from the animated pose and its velocities
+  // frames riding on body segments: x forward, y up the segment, z to the rider's right
+  frame(o, yv, zv) {
+    const Y = yv.norm(), Z = zv.sub(Y.mul(zv.dot(Y))).norm(), X = Y.cross(Z);
+    return { toLocal: (p) => { const d = p.sub(o); return new V(d.dot(X), d.dot(Y), d.dot(Z)); }, toWorld: (l) => o.add(X.mul(l.x)).add(Y.mul(l.y)).add(Z.mul(l.z)) };
+  }
+  pelvisFrame(x) { const m = x[J.hipL].add(x[J.hipR]).mul(0.5); return this.frame(m, x[J.spine].sub(m), x[J.hipR].sub(x[J.hipL])); }
+  chestFrame(x) { return this.frame(x[J.spine], x[J.neck].sub(x[J.spine]), x[J.shR].sub(x[J.shL])); }
+
   fromPose(xs, vs) {
     this.x = xs.map(p => new V(p.x, p.y, p.z)); this.v = vs.map(p => new V(p.x, p.y, p.z));
-    this.buildConstraints(); this.attached = false; this.crashed = true; this.tone = 0.6;
+    this.buildConstraints(); this.attached = false; this.crashed = true; this.tone = 0.6; this.crashT = 0;
+    // body shape the crash muscles hold: the riding pose, slightly tucked (elbows/knees in, chin down)
+    const x = this.x, pf = this.pelvisFrame(x), cf = this.chestFrame(x), R = this.restC = {};
+    R.neck = pf.toLocal(x[J.neck]); R.head = cf.toLocal(x[J.head]).add(new V(0.03, -0.02, 0));
+    for (const k of ['L', 'R']) {
+      R['elb' + k] = cf.toLocal(x[J['elb' + k]]).mul(0.9); R['hand' + k] = cf.toLocal(x[J['hand' + k]]).mul(0.8);
+      R['knee' + k] = pf.toLocal(x[J['knee' + k]]); R['ank' + k] = pf.toLocal(x[J['ank' + k]]); R['toe' + k] = pf.toLocal(x[J['toe' + k]]);
+    }
   }
 
   // spin the body as a whole about its centre of mass (no net force): used by the assist layer
