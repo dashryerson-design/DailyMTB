@@ -77,25 +77,25 @@ export function buildWorld(scene0, track) {
       : [[2.2, 3.6, 2.4], [1.7, 3.0, 4.4], [1.1, 2.4, 6.2]].map(([rad, h, y]) => { const c = new T.ConeGeometry(rad, h, 9); c.translate(0, y, 0); return c.toNonIndexed(); }); let n = 0; parts.forEach(p => n += p.attributes.position.count); const pos = new Float32Array(n * 3); let o = 0; parts.forEach(p => { pos.set(p.attributes.position.array, o); o += p.attributes.position.array.length; }); const g = new T.BufferGeometry(); g.setAttribute('position', new T.BufferAttribute(pos, 3)); g.computeVertexNormals(); return g; })();
   const trees = [], dens = { pine: 1, snowpine: 0.7, cactus: 0.25 }[P.treeKind] ?? 1;
   // line the trail: a dense wall of trees just off the riding line, so the run feels like a corridor
-  for (let sv = 0; sv < track.total; sv += 1.1) for (const sd of [-1, 1]) {
-    if (r() > 0.85 * dens) continue;
-    const d = sd * (3.4 + r() ** 1.6 * 10), p = track.toWorld(sv + (r() - 0.5), d);
-    if (track.trackDist(p.x, p.z) < 3.3) continue;
+  for (let sv = 0; sv < track.total; sv += 2.2) for (const sd of [-1, 1]) {
+    if (r() > 0.45 * dens) continue;
+    const d = sd * (6 + r() ** 1.4 * 12), p = track.toWorld(sv + (r() - 0.5), d);
+    if (track.trackDist(p.x, p.z) < 5.5) continue;
     trees.push([p.x, p.z, 0.6 + r() * 0.8]);
   }
-  for (let i = 0; i < P.trees * 6 && trees.length < P.trees + 2400 * dens; i++) { const x = minX + r() * (maxX - minX), z = minZ + r() * (maxZ - minZ); if (track.trackDist(x, z) < 5.5 || (track.farDist && track.farDist(x, z) > 65)) continue; trees.push([x, z, 0.7 + r() * 0.8]); }
+  for (let i = 0; i < P.trees * 6 && trees.length < P.trees + 800 * dens; i++) { const x = minX + r() * (maxX - minX), z = minZ + r() * (maxZ - minZ); if (track.trackDist(x, z) < 5.5 || (track.farDist && track.farDist(x, z) > 65)) continue; trees.push([x, z, 0.7 + r() * 0.8]); }
   const trunks = new T.InstancedMesh(trunkG, new T.MeshStandardMaterial({ color: new T.Color(0x3b2a1e).convertSRGBToLinear(), roughness: 0.9 }), trees.length);
   const fol = new T.InstancedMesh(folG, new T.MeshStandardMaterial({ color: 0xffffff, roughness: 0.85 }), trees.length);
   trees.forEach(([x, z, s], i) => { const y = track.h(x, z); q.setFromAxisAngle(new T.Vector3(0, 1, 0), r() * 6.28); trunks.setMatrixAt(i, mm.compose(new T.Vector3(x, y, z), q, new T.Vector3(s, (cactus ? 3.2 : 3.5) * s, s))); fol.setMatrixAt(i, mm.compose(new T.Vector3(x, y, z), q, new T.Vector3(s, s, s))); fol.setColorAt && fol.setColorAt(i, new T.Color().setHSL(P.fol[0] + r() * 0.04, P.fol[1], P.fol[2] + r() * 0.07).convertSRGBToLinear()); });
   if (cactus) trunks.material.color.set(0x4f6b3a).convertSRGBToLinear();
   trunks.castShadow = fol.castShadow = true; fol.receiveShadow = true; scene.add(trunks, fol);
   const bushG = new T.IcosahedronGeometry(1, 1), bushes = [];
-  for (let sv = 0; sv < track.total; sv += 0.8) for (const sd of [-1, 1]) {      // undergrowth right at the trail edge
-    if (r() > 0.75) continue;
-    const p = track.toWorld(sv + (r() - 0.5), sd * (2.5 + r() * 4)); if (track.trackDist(p.x, p.z) < 2.4) continue;
-    bushes.push([p.x, p.z, 0.3 + r() * 0.55]);
+  for (let sv = 0; sv < track.total; sv += 1.6) for (const sd of [-1, 1]) {      // low undergrowth along the trail edge
+    if (r() > 0.5) continue;
+    const p = track.toWorld(sv + (r() - 0.5), sd * (3.2 + r() * 5)); if (track.trackDist(p.x, p.z) < 3.1) continue;
+    bushes.push([p.x, p.z, 0.25 + r() * 0.4]);
   }
-  for (let i = 0; i < P.bushes * 3 && bushes.length < P.bushes + 2200; i++) { const x = minX + r() * (maxX - minX), z = minZ + r() * (maxZ - minZ), d = track.trackDist(x, z); if (d < 2.9 || (d > 9 && r() < 0.6)) continue; bushes.push([x, z, 0.3 + r() * 0.6]); }
+  for (let i = 0; i < P.bushes * 3 && bushes.length < P.bushes + 900; i++) { const x = minX + r() * (maxX - minX), z = minZ + r() * (maxZ - minZ), d = track.trackDist(x, z); if (d < 2.9 || (d > 9 && r() < 0.6)) continue; bushes.push([x, z, 0.3 + r() * 0.6]); }
   const bm = new T.InstancedMesh(bushG, new T.MeshStandardMaterial({ color: 0xffffff, roughness: 0.9, flatShading: true }), bushes.length);
   bushes.forEach(([x, z, s], i) => { bm.setMatrixAt(i, mm.compose(new T.Vector3(x, track.h(x, z) + s * 0.25, z), q, new T.Vector3(s * 1.3, s, s * 1.2))); bm.setColorAt && bm.setColorAt(i, new T.Color().setHSL(P.bush[0] + r() * 0.06, P.bush[1], P.bush[2] + r() * 0.08).convertSRGBToLinear()); });
   bm.castShadow = true; scene.add(bm);
