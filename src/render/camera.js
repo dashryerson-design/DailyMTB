@@ -30,6 +30,11 @@ export class CameraRig {
     this.pos.y += (tgt.y - this.pos.y) * (1 - Math.exp(-dt * k * 1.6));
     this.look.lerp(look, 1 - Math.exp(-dt * 10));
     const gh2 = this.track.h(this.pos.x, this.pos.z) + 0.5; if (this.pos.y < gh2) this.pos.y = gh2;
+    // keep a clear line of sight: if a slope or berm wall sits between camera and bike, rise above it
+    if (this.mode === 0) for (let k = 1; k < 6; k++) {
+      const t = k / 6, x = this.pos.x + (bp.x - this.pos.x) * t, z = this.pos.z + (bp.z - this.pos.z) * t, ly = this.pos.y + (bp.y - this.pos.y) * t;
+      const need = this.track.h(x, z) + 0.45 - ly; if (need > 0) this.pos.y += need / (1 - t);
+    }
     this.cam.position.copy(this.pos); this.cam.lookAt(this.look);
   }
 }

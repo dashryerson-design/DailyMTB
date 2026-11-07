@@ -63,11 +63,11 @@ export const LAYOUT = [
 // ---- biomes: what the generator builds and what the ground is made of
 export const BIOMES = {
   forest: { trail: SURF.DIRT, off: SURF.GRASS, grade: [0.1, 0.2], relief: 7, ridge: 4, valley: 0.09, roots: 1, rocks: 1, moss: true,
-    w: { straight: 1.6, turn: 3, berm: 3.4, bumps: 3, rollers: 1.5, table: 1, bigjump: 0.6, drop: 1, rockslab: 0.7, tech: 1.6 } },
+    w: { descent: 1.4, turn: 3.4, berm: 3.6, bumps: 2.4, rollers: 1.6, jump: 2.6, drop: 1.3, rockslab: 0.6, tech: 1.8 } },
   snow: { trail: SURF.SNOW, off: SURF.SNOW, grade: [0.11, 0.22], relief: 14, ridge: 12, valley: 0.13, roots: 0, rocks: 0.5, ice: true,
-    w: { straight: 2, turn: 3.2, berm: 3, bumps: 0.9, rollers: 2, table: 1.6, bigjump: 1, drop: 0.6, rockslab: 0.5, tech: 0.8, ice: 0.5 } },
+    w: { descent: 2.2, turn: 3.2, berm: 3.6, bumps: 0.8, rollers: 2, jump: 3, drop: 0.8, rockslab: 0.5, tech: 0.9, ice: 0.4 } },
   desert: { trail: SURF.DIRT, off: SURF.SAND, grade: [0.1, 0.2], relief: 10, ridge: 8, valley: 0.11, roots: 0, rocks: 1.3, sandstone: true,
-    w: { straight: 2.2, turn: 3, berm: 2.2, bumps: 1.6, rollers: 1.5, table: 1, bigjump: 1.2, drop: 1.8, rockslab: 2, tech: 1, sand: 0.6 } },
+    w: { descent: 2.2, turn: 3, berm: 2.6, bumps: 1.4, rollers: 1.4, jump: 2.8, drop: 2.2, rockslab: 1.6, tech: 1.1, sand: 0.4 } },
   test: { trail: SURF.DIRT, off: SURF.GRASS, grade: [0.1, 0.1], relief: 2, ridge: 0, valley: 0.05, roots: 1, rocks: 1, w: {} },
 };
 
@@ -87,28 +87,47 @@ export function generateLayout(seed, biome) {
     heading += sign * ang; return sign * ang / D2R;
   };
   const pick = () => { const e = Object.entries(B.w).filter(([k]) => k !== last); const tot = e.reduce((a, [, v]) => a + v, 0); let q = r() * tot; for (const [k, v] of e) if ((q -= v) <= 0) return k; return 'straight'; };
+  // run-in length that lets a coasting rider arrive near the design speed
+  const runIn = (v, g) => clamp((v * v - 49) / (2 * 9.81 * (g - 0.035)), 14, 46);
   while (s < target - 30) {
     const k = pick(); last = k; n++;
-    const jump = k === 'rollers' || k === 'table' || k === 'bigjump' || k === 'drop';
-    if (jump) push(k === 'bigjump' ? { len: 26 + r() * 8, grade: 0.2 } : { len: 12 + r() * 8, grade: 0.15 + r() * 0.04 });   // run-in long/steep enough to arrive with speed                // run-in: straight, steady, fast enough
     switch (k) {
-      case 'straight': {   // short and never flat: a chute, a rolling crest/dip pair, or a plain descent
-        const v = r(); if (v < 0.35) push({ len: 14 + r() * 12, grade: 0.22 + r() * 0.06, name: 'Steep chute' });
-        else if (v < 0.65) { push({ len: 10 + r() * 6, grade: 0.03 }); push({ len: 10 + r() * 8, grade: 0.24 }); }
-        else push({ len: 12 + r() * 14, grade: G() }); break; }
-      case 'turn': { const R = 11 + r() * 12; push({ arc: R, ang: turnAng((45 + r() * 50) * D2R), grade: 0.1 + r() * 0.06 }); push({ arc: 11 + r() * 10, ang: turnAng((40 + r() * 45) * D2R), grade: 0.1 + r() * 0.06 }); break; }
-      case 'berm': { const R = 9 + r() * 13, bank = clamp(48 - R * 1.1 + r() * 6, 24, 44); push({ arc: R, ang: turnAng((70 + r() * 70) * D2R), bank, grade: 0.1, name: names.berm }); push({ len: 5 + r() * 6, grade: 0.16 }); break; }
-      case 'tech': { push({ arc: 8 + r() * 3, ang: turnAng((50 + r() * 35) * D2R), feat: 'innerRocks', grade: 0.06, name: names.tech }); push({ len: 6 + r() * 6, grade: 0.07 }); push({ arc: 8 + r() * 4, ang: turnAng((45 + r() * 35) * D2R), grade: 0.06 }); break; }
-      case 'bumps': push({ len: 35 + r() * 35, feat: 'bumps', grade: G(), name: names.bumps, roots: B.roots, rocks: B.rocks }); break;
-      case 'rockslab': push({ len: 15 + r() * 10, feat: 'rockslab', surf: SURF.ROCK, grade: G(), name: names.rockslab }); break;
-      case 'ice': push({ len: 10 + r() * 6, surf: SURF.ICE, grade: 0.06, name: names.ice }); break;
-      case 'sand': push({ len: 15 + r() * 12, surf: SURF.SAND, grade: 0.09, name: names.sand }); break;
-      default: push({ len: { rollers: 32, table: 22, bigjump: 32, drop: 22 }[k], feat: k, grade: 0.1, name: names[k], safe: true });
+      case 'descent': {   // fast, steep, with gentle S-curves
+        push({ len: 12 + r() * 10, grade: 0.24 + r() * 0.07, name: 'Fast descent' });
+        push({ arc: 28 + r() * 20, ang: turnAng((18 + r() * 20) * D2R), grade: 0.26 + r() * 0.06 });
+        push({ arc: 28 + r() * 20, ang: turnAng((18 + r() * 20) * D2R), grade: 0.24 + r() * 0.06 }); break; }
+      case 'turn': { const R = 10 + r() * 10; push({ arc: R, ang: turnAng((45 + r() * 50) * D2R), grade: 0.12 + r() * 0.06 }); push({ len: 3 + r() * 5, grade: 0.18 }); push({ arc: 10 + r() * 9, ang: turnAng((45 + r() * 50) * D2R), grade: 0.12 + r() * 0.06 }); break; }
+      case 'berm': {      // big, tall berms: steeper and higher walls on tighter radii
+        const R = 7 + r() * 15, bank = clamp(56 - R * 1.2 + r() * 6, 30, 52), wall = 0.4 + r() * 1.1;
+        push({ arc: R, ang: turnAng((80 + r() * 60) * D2R), bank, wall, grade: 0.12, name: bank > 44 ? 'Massive berm' : 'Berm' }); push({ len: 4 + r() * 6, grade: 0.18 }); break; }
+      case 'tech': { push({ arc: 8 + r() * 3, ang: turnAng((50 + r() * 35) * D2R), feat: 'innerRocks', grade: 0.1, name: names.tech }); push({ len: 5 + r() * 5, grade: 0.15 }); push({ arc: 8 + r() * 4, ang: turnAng((45 + r() * 35) * D2R), grade: 0.1 }); break; }
+      case 'bumps': push({ len: 30 + r() * 30, feat: 'bumps', grade: G() + 0.03, name: names.bumps, roots: B.roots, rocks: B.rocks }); break;
+      case 'rockslab': push({ len: 14 + r() * 10, feat: 'rockslab', surf: SURF.ROCK, grade: G() + 0.04, name: names.rockslab }); break;
+      case 'ice': push({ len: 10 + r() * 6, surf: SURF.ICE, grade: 0.08, name: names.ice }); break;
+      case 'sand': push({ len: 12 + r() * 10, surf: SURF.SAND, grade: 0.12, name: names.sand }); break;
+      case 'rollers': { const nR = 2 + Math.floor(r() * 5), H = 0.3 + r() * 0.5, sp = 5 + r() * 3;
+        push({ len: 10 + r() * 8, grade: 0.16 }); push({ len: 4 + nR * sp, feat: 'rollersP', nR, H, sp, grade: 0.14, name: nR > 4 ? 'Pump track' : 'Rollers' }); push({ len: 8 + r() * 6, grade: 0.14 }); break; }
+      case 'drop': { const dh = 0.6 + r() * 1.2; push({ len: 12 + r() * 8, grade: 0.16 });
+        push({ len: 20, feat: 'dropP', dropH: dh, dropAt: 8, grade: 0.12, name: dh > 1.3 ? 'Big drop' : 'Drop' }); push({ len: 14 + r() * 6, grade: 0.14 }); break; }
+      case 'jump': {      // a jump designed for a speed: kicker angle/height, flight, deck and landing all follow from it
+        const big = r() < 0.4, v = big ? 11 + r() * 2.5 : 8.5 + r() * 2.5, th = (big ? 22 : 18 + r() * 8) * D2R, Hk = big ? 1.4 + r() * 0.9 : 0.7 + r() * 0.7, g = 0.2 + r() * 0.04;
+        const J = designJump(v, th, Hk, 0.12, r() < 0.5);
+        push({ len: runIn(v, g), grade: g }); push({ ...J, v, feat: 'kicker', grade: 0.12, name: big ? (J.table ? 'Huge tabletop' : 'Huge step-down') : (J.table ? 'Tabletop' : 'Step-down') });
+        push({ len: 12 + r() * 8, grade: 0.13 }); break; }
     }
-    if (jump) push({ len: 12 + r() * 6, grade: 0.12 });                             // runout after every jump/drop
   }
   push({ len: 28, name: 'Finish', grade: 0.1, finish: true });
   return out;
+}
+
+// Jump geometry from a design speed v, lip angle th, lip height Hk: the landing ramp is placed where the flight
+// path comes down, with a rounded knuckle and a deck (tabletop) or filled gap in between, so short = roll out.
+export function designJump(v, th, Hk, g, table) {
+  const p = 1.7, lipLen = p * Hk / Math.tan(th), deckH = table ? Hk * 0.6 : 0.3, landLen = 10 + Hk * 5, landDrop = landLen * 0.2;
+  const thW = th - Math.atan(g), vx = v * Math.cos(thW), vy = v * Math.sin(thW), mid = deckH - landDrop * 0.45;
+  let x = 0.5; for (; x < 40; x += 0.05) { const t = x / vx, y = Hk + vy * t - 4.905 * t * t + g * x; if (y <= mid) break; }
+  const xk = clamp(lipLen + x - landLen * 0.25, lipLen + 1.5, lipLen + 22);   // touch down on the steep upper part
+  return { lipLen, lipH: Hk, p, deckH, xk, landLen, landDrop, len: xk + landLen, table, safe: true };
 }
 
 function profile(seg, ls, d, noise) {
@@ -131,11 +150,22 @@ function profile(seg, ls, d, noise) {
       else if (ls < 20) h += lerp(0.25, -2.0, smooth((ls - 12.5) / 7.5));
       break; }
     case 'rockslab': h += 0.05 * noise(ls * 0.9, d * 0.9); break;
+    case 'kicker':
+      if (ls < seg.lipLen) h += seg.lipH * Math.pow(ls / seg.lipLen, seg.p);
+      else if (ls < seg.lipLen + 0.8) h += lerp(seg.lipH, seg.deckH, smooth((ls - seg.lipLen) / 0.8));
+      else if (ls < seg.xk) h += seg.deckH;
+      else {   // landing: steepest just past a rounded knuckle, then easing out into a long, smooth transition
+        const u = clamp((ls - seg.xk) / seg.landLen, 0, 1), k = smooth(clamp((ls - seg.xk) / 2.5, 0, 1));
+        h += lerp(seg.deckH + seg.landDrop, 0, (1 - (1 - u) * (1 - u)) * k + u * (1 - k) * 0.5);   // base already dropped by landDrop at the knuckle (event)
+      }
+      break;
+    case 'rollersP': for (let i = 0; i < seg.nR; i++) { const u = (ls - 2 - i * seg.sp) / (seg.sp * 0.85); if (u > 0 && u < 1) h += seg.H * Math.sin(Math.PI * u) ** 2; } break;
+    case 'dropP': if (ls > seg.dropAt - 5 && ls < seg.dropAt + 0.05) { surf = SURF.ROCK; h += 0.04 * noise(ls * 1.3, d * 1.3); } break;
     case 'drop': if (ls > 3 && ls < 8.05) { surf = SURF.ROCK; h += 0.04 * noise(ls * 1.3, d * 1.3); } break;
   }
   if (seg.bank) {
     const f = smooth(Math.min(ls, seg.len - ls) / 7);
-    const o = -seg.sign * d, wb = W + 0.5, tb = Math.tan(seg.bank * D2R * f);
+    const o = -seg.sign * d, wb = W + 0.5 + (seg.wall || 0), tb = Math.tan(seg.bank * D2R * f);
     const oc = Math.max(-wb, Math.min(o, 0.65 * wb)); h += tb * (oc + wb) ** 2 / (2 * wb) - tb * wb / 2;
   }
   return [h, surf];
@@ -182,6 +212,8 @@ export function buildTrack(seed = 7, opts = {}) {
   for (const sg of segs) {
     if (sg.feat === 'bigjump') events.push({ s: sg.s0 + 20, D: 2.0 });
     if (sg.feat === 'drop') events.push({ s: sg.s0 + 8.05, D: 1.1 });
+    if (sg.feat === 'dropP') events.push({ s: sg.s0 + sg.dropAt + 0.05, D: sg.dropH });
+    if (sg.feat === 'kicker') events.push({ s: sg.s0 + sg.xk, D: sg.landDrop });   // inside the feature, so neighbouring segments never see a step
   }
   const keep = biome !== 'test';   // generated runs keep the height lost at jumps/drops (no creeping back uphill)
   const offset = (s) => { let o = 0; for (const e of events) if (s >= e.s) o -= e.D * (keep ? 1 : Math.max(0, Math.min(1, 1 - (s - e.s - 18) / 70))); return o; };
@@ -242,7 +274,7 @@ export function buildTrack(seed = 7, opts = {}) {
       const c = Math.cos(PSI[k]), sn = Math.sin(PSI[k]), dx = px - X[k], dz = pz - Z[k];
       const along = dx * c + dz * sn, d = -dx * sn + dz * c, sc = S[k] + along, seg = segs[SEG[k]];
       const [ph, surf] = profile(seg, clamp(sc - seg.s0, 0, seg.len), d, noise);
-      const o = -seg.sign * d, t0b = (seg.bank && o > 0) ? 3.0 : W + 0.5, ad = Math.abs(d);
+      const o = -seg.sign * d, t0b = (seg.bank && o > 0) ? 3.0 + (seg.wall || 0) : W + 0.5, ad = Math.abs(d);
       t.H[id] = lerp(elev(sc) + ph, t.H[id], smooth((ad - t0b) / 4.0));
       if (ad < W + 0.3) t.SF[id] = surf;
       t.TD[id] = Math.min(255, Math.round(ad * 20));
@@ -273,6 +305,11 @@ export function buildTrack(seed = 7, opts = {}) {
     }
     if (sg.feat === 'innerRocks') for (let k = 0; k < 14 * rd; k++) rocks.push({ s: sg.s0 + 1 + r() * (sg.len - 2), d: sg.sign * (1.2 + r() * 1.2), rr: 0.15 + r() * 0.2, rh: 0.08 + r() * 0.15 });
     if (sg.feat === 'rockslab') for (let k = 0; k < 18 * rd; k++) rocks.push({ s: sg.s0 + r() * sg.len, d: (r() * 2 - 1) * 1.6, rr: 0.1 + r() * 0.15, rh: 0.03 + r() * 0.07 });
+    if (sg.feat === 'dropP') {
+      const a0 = sg.dropAt;
+      for (let k = 0; k < 10; k++) { const side = k % 2 ? 1 : -1; rocks.push({ s: sg.s0 + a0 - 1.4 + r() * 1.3, d: side * (1.0 + r() * 1.1), rr: 0.25 + r() * 0.2, rh: 0.15 + r() * 0.2 }); }
+      for (let k = 0; k < 6; k++) rocks.push({ s: sg.s0 + a0 + 0.3 + r() * 0.6, d: (r() * 2 - 1) * 2.2, rr: 0.3 + r() * 0.2, rh: 0.2 + sg.dropH * 0.3, face: true });
+    }
     if (sg.feat === 'drop') {
       for (let k = 0; k < 10; k++) { const side = k % 2 ? 1 : -1; rocks.push({ s: sg.s0 + 6.6 + r() * 1.3, d: side * (1.0 + r() * 1.1), rr: 0.25 + r() * 0.2, rh: 0.15 + r() * 0.2 }); }
       for (let k = 0; k < 6; k++) rocks.push({ s: sg.s0 + 8.3 + r() * 0.6, d: (r() * 2 - 1) * 2.2, rr: 0.3 + r() * 0.2, rh: 0.25 + r() * 0.3, face: true });

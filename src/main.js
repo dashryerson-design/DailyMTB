@@ -63,12 +63,12 @@ function load(b) {
     if (L) { disposeTree(L.world); }
     const track = generateTrack(b), w = buildWorld(scene, track), sys = new RideSystem(track);
     w.root.add(gate(track, 6, 'START', '#f4efe6'), gate(track, track.total - 8, 'FINISH', '#ff6a1a'));
-    L = { track, sys, bike: sys.bike, rider: sys.rider, rig: new CameraRig(cam, track), world: w.root, sun: w.sun, section: 0, hist: [], visLean: 0, runT: 0, started: false, done: false, si: 0 };
+    L = { track, sys, bike: sys.bike, rider: sys.rider, rig: new CameraRig(cam, track), world: w.root, sun: w.sun, clearView: w.clearView, section: 0, hist: [], visLean: 0, runT: 0, started: false, done: false, si: 0 };
     const names = track.sections.slice(0, 9);
     $('sections').innerHTML = names.map((s, i) => `<li><kbd>${i + 1}</kbd> ${s.name}</li>`).join('');
     $('helpTitle').textContent = `${b} · ${(track.total / 1000).toFixed(2)} km`;
     $('trackname').textContent = `${b.toUpperCase()} · ${(track.total / 1000).toFixed(2)} km · seed ${track.seed}`;
-    window.__dbg = { renderer, scene, cam, bike: sys.bike, sys, track };
+    window.__dbg = { renderer, scene, cam, bike: sys.bike, sys, track, get L() { return L; } };
     restartRun(); show('hud'); mode = 'ride';
   }, 60);
 }
@@ -128,7 +128,7 @@ function frame(now) {
     }
     model.update(view); riderModel.update({ x: sys.body(dt, view) }, view);
     let camT = bike; if (!bike.mounted) { camT = Object.create(bike); camT.p = rider.com; camT.v = rider.v[0].mul(0); }
-    L.rig.update(dt, camT);
+    L.rig.update(dt, camT); L.clearView(cam.position);
     L.sun.position.set(bike.p.x + 30, bike.p.y + 60, bike.p.z + 20); L.sun.target.position.set(bike.p.x, bike.p.y, bike.p.z);
     renderer.render(scene, cam);
   }

@@ -230,7 +230,7 @@ export class Bike {
       F = F.sub(fr); T = T.add(rA.cross(fr.mul(-1))); this.torsoOff = dl;
       T = T.add(right.mul(ip.pitch * 110));                 // bar/pedal push-pull against the body
       // crash: head/torso into the ground, or the bike upside down
-      for (const off of [0, 0.42]) { const hp = this.pr.add(up.mul(off)); if (this.track.h(hp.x, hp.z) > hp.y - 0.15) { this.crashed = true; this.crashCause = off ? 'head' : 'torso'; } }
+      for (const off of [0, 0.42]) { const hp = this.pr.add(up.mul(off)); if (this.track.h(hp.x, hp.z) > hp.y - (off ? 0.02 : 0.1)) { this.crashed = true; this.crashCause = off ? 'head' : 'torso'; } }
       if (up.y < 0.1) { this.crashed = true; this.crashCause = 'upside down'; }
     }
     for (const e of ext) { F = F.add(e.f); T = T.add(e.p.sub(this.p).cross(e.f)); if (e.t) T = T.add(e.t); }
