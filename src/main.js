@@ -63,7 +63,10 @@ function start() {
       view = Object.create(bike); view.q = rq.mul(bike.q); view.p = gp.add(rq.rot(bike.p.sub(gp)));
     }
     model.update(view); riderModel.update({ x: sys.body(dt, view) }, view);
-    rig.update(dt, bike);
+    // after a crash the camera follows the rider's body, not the bike
+    let camT = bike;
+    if (!bike.mounted) { camT = Object.create(bike); camT.p = rider.com; camT.v = rider.v[0].mul(0); }
+    rig.update(dt, camT);
     sun.position.set(bike.p.x + 30, bike.p.y + 60, bike.p.z + 20); sun.target.position.set(bike.p.x, bike.p.y, bike.p.z);
     renderer.render(scene, cam);
     hud(); drawGraph();

@@ -75,7 +75,7 @@ export class Rider {
     rel('shL', 'hipR', -0.07, 0.07); rel('shR', 'hipL', -0.07, 0.07);             // spine twist
     rel('head', 'shL', -0.05, 0.05); rel('head', 'shR', -0.05, 0.05); rel('head', 'spine', -0.06, 0.04); // neck
     abs('shL', 'handL', 0.14, SEG.upper + SEG.fore); abs('shR', 'handR', 0.14, SEG.upper + SEG.fore);       // elbows
-    abs('hipL', 'ankL', 0.2, SEG.thigh + SEG.shin); abs('hipR', 'ankR', 0.2, SEG.thigh + SEG.shin);         // knees
+    abs('hipL', 'ankL', 0.3, SEG.thigh + SEG.shin); abs('hipR', 'ankR', 0.3, SEG.thigh + SEG.shin);         // knees
     rel('kneeL', 'toeL', -0.09, 0.07); rel('kneeR', 'toeR', -0.09, 0.07);        // ankles
     abs('spine', 'kneeL', 0.22, d(J.spine, J.kneeL) + 0.12); abs('spine', 'kneeR', 0.22, d(J.spine, J.kneeR) + 0.12); // hip flexion
     abs('neck', 'elbL', 0.12, 0.62); abs('neck', 'elbR', 0.12, 0.62);           // shoulder cone
@@ -202,17 +202,17 @@ export class Rider {
         let f = target.sub(x[i]).mul(k * mt).add(vt.sub(v[i]).mul(c)); const L = f.len(); if (L > cap) f = f.mul(cap / L);
         madd(i, f); for (const p of parents) madd(p, f.mul(-1 / parents.length));
       };
-      motor(J.neck, pf.toWorld(R.neck), 2600, 160, 1100, [J.hipL, J.hipR]);              // spine: strong
-      motor(J.head, cf.toWorld(R.head), 1300, 50, 300, [J.neck, J.spine]);               // neck
-      for (const k of ['L', 'R']) {
-        motor(J['elb' + k], cf.toWorld(R['elb' + k]), 700, 35, 260, [J['sh' + k]]);         // shoulder
-        motor(J['hand' + k], cf.toWorld(R['hand' + k]), 420, 22, 180, [J['elb' + k]]);      // elbow
-        motor(J['knee' + k], pf.toWorld(R['knee' + k]), 1100, 60, 450, [J['hip' + k]]);     // hip
-        motor(J['ank' + k], pf.toWorld(R['ank' + k]), 650, 32, 300, [J['knee' + k]]);      // knee
-        motor(J['toe' + k], pf.toWorld(R['toe' + k]), 160, 6, 60, [J['ank' + k]]);         // ankle
-      }
-      for (const [a2, c2, lo, hi] of this.C) if (lo === hi) { const dv = v[c2].sub(v[a2]).mul(12); madd(a2, dv); madd(c2, dv.mul(-1)); }
+      // trunk only: spine and neck resist folding (toward a natural, mostly straight body). Limbs get no pose
+      // targets - they hang under gravity, braked by joint damping and stopped by the joint limits.
+      motor(J.neck, pf.toWorld(R.neck), 1800, 120, 800, [J.hipL, J.hipR]);
+      motor(J.head, cf.toWorld(R.head), 900, 40, 250, [J.neck, J.spine]);
+      // passive tissue: knees and elbows ease toward a relaxed, slightly bent angle (soft, never pins a pose)
+      const relaxed = (a2, c2, l1, l2, deg, k) => { const L0 = Math.sqrt(l1 * l1 + l2 * l2 - 2 * l1 * l2 * Math.cos(deg * Math.PI / 180)), d = x[c2].sub(x[a2]), L = d.len(); if (L < 1e-6) return;
+        const u = d.mul(1 / L), f = u.mul(clamp(k * (L0 - L) - 25 * v[c2].sub(v[a2]).dot(u), -160, 160)); madd(c2, f); madd(a2, f.mul(-1)); };
+      for (const k of ['L', 'R']) { relaxed(J['hip' + k], J['ank' + k], SEG.thigh, SEG.shin, 150, 450); relaxed(J['sh' + k], J['hand' + k], SEG.upper, SEG.fore, 145, 250); }
+      for (const [a2, c2, lo, hi] of this.C) if (lo === hi) { const dv = v[c2].sub(v[a2]).mul(7); madd(a2, dv); madd(c2, dv.mul(-1)); }
     }
+    if (this.crashed && this.restC) this.limitJoints(x, v, Fm);
     // muscles are internal: zero net force by construction, but non-collinear pairs make a net couple.
     // Real joint torques react against the bike through the feet/hands, so pass that couple to the bike
     // (keeps rider+bike angular momentum exact). Detached, cancel it inside the body instead.
@@ -239,14 +239,13 @@ export class Rider {
     const vb = b.v, dragK = 0.5 * 1.2 * 0.5 * vb.len() / RIDER_MASS;
     for (let i = 0; i < n; i++) { F[i] = F[i].sub(v[i].mul(dragK * MASSES[i])); }
     for (let i = 0; i < n; i++) { v[i] = v[i].add(F[i].mul(dt / MASSES[i])); xp[i] = x[i].add(v[i].mul(dt)); }
-    for (let it = 0; it < (this.crashed ? 10 : 4); it++) {
+    for (let it = 0; it < (this.crashed ? 6 : 4); it++) {
       for (const [a, c, lo, hi] of this.C) {
         const d = xp[c].sub(xp[a]), L = d.len(); if (L < 1e-9) continue;
         const tgt = L < lo ? lo : L > hi ? hi : L; if (tgt === L) continue;
         const corr = d.mul((L - tgt) / L / (this.w[a] + this.w[c]));
         xp[a] = xp[a].add(corr.mul(this.w[a])); xp[c] = xp[c].sub(corr.mul(this.w[c]));
       }
-      if (this.crashed) this.limitJoints(xp);
       // knees bend forward only (relative to the pelvis), and clear the frame while riding
       const pr = xp[J.hipR].sub(xp[J.hipL]).norm();
       for (const [hp, kn, an, s] of [[J.hipL, J.kneeL, J.ankL, -1], [J.hipR, J.kneeR, J.ankR, 1]]) {
@@ -275,7 +274,7 @@ export class Rider {
     let vfix = new V();
     if (this.crashed && this.vmPrev) { const lim = this.vmPrev.len() + 9.81 * dt * 1.2; if (vm.len() > lim) { const vl = vm.mul(lim / vm.len()); vfix = vm.sub(vl); vm = vl; } }
     this.vmPrev = vm;
-    for (let i = 0; i < n; i++) { let vi = xp[i].sub(x[i]).mul(1 / dt).sub(vfix); xp[i] = x[i].add(vi.mul(dt)); let rel = vi.sub(vm); const cap = this.crashed ? 8 : 12, rl = rel.len(); if (rl > cap) { vi = vm.add(rel.mul(cap / rl)); xp[i] = x[i].add(vi.mul(dt)); } if (hitN[i]) { const vn = vi.dot(hitN[i]); if (vn > 0.5) vi = vi.sub(hitN[i].mul(vn - 0.5)); }   // ground contact: no bounce / pop-out
+    for (let i = 0; i < n; i++) { let vi = xp[i].sub(x[i]).mul(1 / dt).sub(vfix); let rel = vi.sub(vm); const cap = this.crashed ? 8 : 12, rl = rel.len(); if (rl > cap) { vi = vm.add(rel.mul(cap / rl)); xp[i] = x[i].add(vi.mul(dt)); } if (hitN[i]) { const vn = vi.dot(hitN[i]); if (vn > 0.5) vi = vi.sub(hitN[i].mul(vn - 0.5)); }   // ground contact: no bounce / pop-out
       v[i] = vi; x[i] = xp[i]; }
 
     // ---- crash: body hits the ground, a hand or foot is ripped off, or the bike is upside down
@@ -294,34 +293,29 @@ export class Rider {
   // Human range of motion for a thrown rider. Each limb segment's direction is expressed in its parent's
   // frame as flexion (forward/back) and abduction (out/in) angles and clamped to real limits; the distal
   // joint is moved back onto the allowed direction (mass-weighted, so momentum is kept).
-  limitJoints(xp) {
-    const pf = this.pelvisFrame(xp), cf = this.chestFrame(xp), w = this.w;
-    const cone = (fr, a, b, len, side, fMin, fMax, aMin, aMax) => {
-      const d = xp[b].sub(xp[a]), L = d.len(); if (L < 1e-6) return;
+  limitJoints(x, v, F) {
+    // ligaments: past a joint's range a stiff, damped spring pushes the limb back (force pair, so nothing
+    // fights the constraint solver and momentum is kept). Inside the range they do nothing.
+    const pf = this.pelvisFrame(x), cf = this.chestFrame(x), KL = 5000, CL = 90;
+    const push = (a, b, dir, depth) => { const u = dir.norm(), rv = v[b].sub(v[a]).dot(u); const f = u.mul(KL * depth - CL * Math.min(rv, 0)); F[b] = F[b].add(f); F[a] = F[a].sub(f); };
+    const cone = (fr, a, b, side, fMin, fMax, aMin, aMax) => {
+      const d = x[b].sub(x[a]), L = d.len(); if (L < 1e-6) return;
       const l = fr.dirLocal(d.mul(1 / L));
-      let flex = Math.atan2(l.x, -l.y), abd = Math.asin(clamp(l.z * side, -1, 1));
-      // nearest allowed flexion going round the circle (no snapping across the ±180° wrap)
-      const wrapD = (a) => Math.abs(Math.atan2(Math.sin(a), Math.cos(a)));
+      const flex = Math.atan2(l.x, -l.y), abd = Math.asin(clamp(l.z * side, -1, 1)), wrapD = (q) => Math.abs(Math.atan2(Math.sin(q), Math.cos(q)));
       const f2 = flex >= fMin && flex <= fMax ? flex : (wrapD(flex - fMin) < wrapD(flex - fMax) ? fMin : fMax), a2 = clamp(abd, aMin, aMax);
       if (f2 === flex && a2 === abd) return;
       const ca = Math.cos(a2), nl = new V(Math.sin(f2) * ca, -Math.cos(f2) * ca, Math.sin(a2) * side);
-      const target = xp[a].add(fr.dirWorld(nl).mul(L)); let corr = target.sub(xp[b]); const cl = corr.len(); if (cl > 0.03) corr = corr.mul(0.03 / cl);   // gentle per-iteration push
-      const wt = w[a] + w[b];
-      xp[b] = xp[b].add(corr.mul(w[b] / wt)); xp[a] = xp[a].sub(corr.mul(w[a] / wt));   // mass-weighted: keeps momentum
+      const corr = x[a].add(fr.dirWorld(nl).mul(L)).sub(x[b]); push(a, b, corr, Math.min(corr.len(), 0.15));
     };
     const D = Math.PI / 180;
     for (const [k, sd] of [['L', -1], ['R', 1]]) {
-      // hip: thigh 125° forward flexion, 25° back, 45° out, 20° across
-      cone(pf, J['hip' + k], J['knee' + k], 0, sd, -25 * D, 125 * D, -20 * D, 45 * D);
-      // shoulder: arm 170° forward, 50° back, 160° out, 30° across the chest
-      cone(cf, J['sh' + k], J['elb' + k], 0, sd, -50 * D, 180 * D, -30 * D, 160 * D);
-      // elbow: forearm only folds toward the front of the upper arm, never bends backwards
-      const u = xp[J['elb' + k]].sub(xp[J['sh' + k]]).norm(), fa = xp[J['hand' + k]].sub(xp[J['elb' + k]]), n = cf.X.sub(u.mul(cf.X.dot(u))).norm();
-      const back = -fa.dot(n) - 0.03; if (back > 0) { const c = n.mul(Math.min(back, 0.04) * w[J['hand' + k]] / (w[J['hand' + k]] + w[J['elb' + k]])); xp[J['hand' + k]] = xp[J['hand' + k]].add(c); xp[J['elb' + k]] = xp[J['elb' + k]].sub(c.mul(w[J['elb' + k]] / w[J['hand' + k]])); }
-      // knee: shin only folds backward relative to the thigh, never sideways or forward
-      const th = xp[J['knee' + k]].sub(xp[J['hip' + k]]).norm(), sh = xp[J['ank' + k]].sub(xp[J['knee' + k]]), nk = pf.X.sub(th.mul(pf.X.dot(th))).norm();
-      const fwd = sh.dot(nk) - 0.02; if (fwd > 0) { const c = nk.mul(Math.min(fwd, 0.04) * w[J['ank' + k]] / (w[J['ank' + k]] + w[J['knee' + k]])); xp[J['ank' + k]] = xp[J['ank' + k]].sub(c); xp[J['knee' + k]] = xp[J['knee' + k]].add(c.mul(w[J['knee' + k]] / w[J['ank' + k]])); }
-      const hax = th.cross(nk).norm(), lat = sh.dot(hax); if (Math.abs(lat) > 0.06) { const c = hax.mul(clamp(lat - Math.sign(lat) * 0.06, -0.04, 0.04) * w[J['ank' + k]] / (w[J['ank' + k]] + w[J['knee' + k]])); xp[J['ank' + k]] = xp[J['ank' + k]].sub(c); xp[J['knee' + k]] = xp[J['knee' + k]].add(c.mul(w[J['knee' + k]] / w[J['ank' + k]])); }
+      cone(pf, J['hip' + k], J['knee' + k], sd, -25 * D, 125 * D, -20 * D, 45 * D);
+      cone(cf, J['sh' + k], J['elb' + k], sd, -50 * D, 180 * D, -30 * D, 160 * D);
+      const u = x[J['elb' + k]].sub(x[J['sh' + k]]).norm(), fa = x[J['hand' + k]].sub(x[J['elb' + k]]), n = cf.X.sub(u.mul(cf.X.dot(u))).norm();
+      const back = -fa.dot(n) - 0.03; if (back > 0) push(J['elb' + k], J['hand' + k], n, Math.min(back, 0.15));
+      const th = x[J['knee' + k]].sub(x[J['hip' + k]]).norm(), sh = x[J['ank' + k]].sub(x[J['knee' + k]]), nk = pf.X.sub(th.mul(pf.X.dot(th))).norm();
+      const fw = sh.dot(nk) - 0.02; if (fw > 0) push(J['knee' + k], J['ank' + k], nk.mul(-1), Math.min(fw, 0.15));
+      const hax = th.cross(nk).norm(), lat = sh.dot(hax); if (Math.abs(lat) > 0.06) push(J['knee' + k], J['ank' + k], hax.mul(-Math.sign(lat)), Math.min(Math.abs(lat) - 0.06, 0.15));
     }
   }
 
@@ -331,13 +325,9 @@ export class Rider {
   fromPose(xs, vs) {
     this.x = xs.map(p => new V(p.x, p.y, p.z)); this.v = vs.map(p => new V(p.x, p.y, p.z));
     this.buildConstraints(); this.attached = false; this.crashed = true; this.tone = 0.6; this.crashT = 0; this.vmPrev = null;
-    // body shape the crash muscles hold: the riding pose, slightly tucked (elbows/knees in, chin down)
-    const x = this.x, pf = this.pelvisFrame(x), cf = this.chestFrame(x), R = this.restC = {};
-    R.neck = pf.toLocal(x[J.neck]); R.head = cf.toLocal(x[J.head]).add(new V(0.03, -0.02, 0));
-    for (const k of ['L', 'R']) {
-      R['elb' + k] = cf.toLocal(x[J['elb' + k]]).mul(0.9); R['hand' + k] = cf.toLocal(x[J['hand' + k]]).mul(0.8);
-      R['knee' + k] = pf.toLocal(x[J['knee' + k]]); R['ank' + k] = pf.toLocal(x[J['ank' + k]]); R['toe' + k] = pf.toLocal(x[J['toe' + k]]);
-    }
+    // body shape the trunk muscles hold: a natural, mostly straight spine with the head in line
+    const R = this.restC = {};
+    R.neck = new V(0.08, SEG.lumbar + SEG.thorax - 0.04, 0); R.head = new V(0.05, SEG.thorax + SEG.neck - 0.02, 0);
   }
 
   // spin the body as a whole about its centre of mass (no net force): used by the assist layer
