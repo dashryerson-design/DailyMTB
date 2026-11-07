@@ -15,6 +15,7 @@ export const ASSIST = {
   landingAlign: 1.0,     // airborne pitch/roll alignment toward the landing surface
   landingRoll: 1.0,      // airborne roll correction
   recovery: 1.0,         // post-landing roll/yaw settling
+  surface: 1.0,          // keeps the bike's angle to a banked surface in a sane band and calm
 };
 
 const deadband = (e, d) => Math.abs(e) < d ? 0 : e - Math.sign(e) * d;
@@ -45,6 +46,14 @@ export class Assist {
       const tu = -(k * err + c * leanRate * (slow + (Math.abs(err) > 0 ? 0.5 : 0)));
       T = T.add(fh.mul(tu)); info.upright = tu;
 
+      // -- surface angle: on a bank, keep the bike within ~25° of square to the riding surface and damp
+      //    roll wobble relative to it, so berms feel planted instead of twitchy
+      const bk = b.bankF || 0, onBank = clamp(Math.abs(bk) / 0.15, 0, 1);
+      if (onBank > 0) {
+        const rel = lean - bk, ex = rel > 0.6 ? rel - 0.6 : rel < -0.6 ? rel + 0.6 : 0;
+        const ts = -A.surface * onBank * (700 * ex + leanRate * (ex !== 0 ? 120 : 60));
+        T = T.add(fh.mul(ts)); info.surface = ts;
+      }
       // -- directional: line the bike up with its direction of travel (sideslip), weaker while steering
       const vel = new V(b.v.x, 0, b.v.z), vl = vel.len();
       if (vl > 1.5) {

@@ -114,7 +114,8 @@ export class Bike {
     // --- rider: balance by steering (steer into the fall), countersteer to initiate lean
     let target;
     const h = 0.97, Ir = SYS_ROLL_I + MASS * h * h, wn = ASSIST.leanBandwidth, zeta = 0.9, vabs = Math.max(Math.abs(vf), 0.1);
-    if (!this.cF) { target = this.steer * (1 - 8 * dt); this.visBank = 0; }   // front wheel unloaded: steering does nothing, so straighten the bars for touchdown
+    this.fOff = this.cF ? 0 : (this.fOff || 0) + dt;   // front wheel skipping for a moment on a berm is not 'airborne'
+    if (this.fOff > 0.08) { target = this.steer * (1 - 8 * dt); this.visBank = 0; }   // front wheel unloaded: steering does nothing, so straighten the bars for touchdown
     else if (vf > 1.2) {
       const nb = this.track.normal(this.p.x, this.p.z), bank = Math.atan2(nb.x * rh.x + nb.z * rh.z, nb.y);   // + = surface tilted down to the right
       // A/D + ←/→ the same way = committed carve: the rider throws the bike much further over and turns far
@@ -132,7 +133,8 @@ export class Bike {
       // surface. Physics balance stays in world terms, so it is NOT added to the balance target here.
       this.bankF = (this.bankF ?? 0) + (bank - (this.bankF ?? 0)) * Math.min(1, dt / 0.15);
       const turnSide = Math.abs(this.leanT) > 0.03 ? Math.sign(this.leanT) : Math.sign(ip.lean);
-      const bankAdd = Math.sign(this.bankF) === turnSide ? this.bankF : 0;
+      // fades in with how committed the turn is (no on/off flicker when lean or bank crosses zero)
+      const bankAdd = Math.max(0, Math.sign(turnSide) * this.bankF) * Math.sign(turnSide) * clamp((Math.abs(this.leanT) + Math.abs(ip.lean) * 0.3) / 0.2, 0, 1);
       this.visBank = bankAdd; const leanT = this.leanT + (combo > 0 ? 0.3 : 0.5) * ip.lean * (Math.sign(ip.lean) === Math.sign(this.leanT) || Math.abs(this.leanT) < 0.05 ? margin : 1);
       const a = MASS * h * vf * vf * Math.sin(G.HEAD_ANGLE) / G.WHEELBASE;
       const Kp = Math.min(5, (Ir * wn * wn + MASS * GRAV * h) / a), Kd = Math.min(1.2, 2 * zeta * wn * Ir / a);

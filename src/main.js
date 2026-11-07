@@ -1,6 +1,6 @@
 import { buildTrack } from './terrain/track.js';
 import { RideSystem } from './physics/system.js';
-import { V, Q } from './core/math.js';
+import { V, Q, clamp } from './core/math.js';
 import * as G from './physics/geometry.js';
 import { BikeModel } from './render/bikeModel.js';
 import { RiderModel } from './render/riderModel.js';
@@ -55,7 +55,7 @@ function start() {
     }
     // draw the bike + rider leaning relative to the riding surface: on a banked turn the bank is added on
     // top of the lean (rolled about the tyre contact line, so the wheels stay on the berm)
-    visLean += ((bike.mounted && !bike.crashed ? bike.visBank || 0 : 0) - visLean) * Math.min(1, dt * 6);
+    visLean += ((bike.mounted && !bike.crashed ? clamp(bike.visBank || 0, -0.6, 0.6) : 0) - visLean) * Math.min(1, dt * 3);
     let view = bike;
     if (Math.abs(visLean) > 1e-3) {
       const f = bike.q.rot(new V(1, 0, 0)), fh = new V(f.x, 0, f.z).norm(), rq = Q.axis(fh, visLean);
