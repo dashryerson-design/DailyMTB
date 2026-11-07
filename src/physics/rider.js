@@ -58,6 +58,11 @@ export class Rider {
   reset(b) {
     const loc = this.pose(b, [-0.16, 0.86]);
     this.x = loc.map(l => this.world(b, l)); this.v = this.x.map(p => this.velAt(b, p));
+    this.buildConstraints();
+  }
+
+  // ragdoll joint structure from the current body positions
+  buildConstraints() {
     const d = (a, c) => this.x[a].sub(this.x[c]).len(), C = [];
     const bone = (a, c) => C.push([J[a], J[c], d(J[a], J[c]), d(J[a], J[c])]);
     const rel = (a, c, lo, hi) => { const r = d(J[a], J[c]); C.push([J[a], J[c], r + lo, r + hi]); };
@@ -156,7 +161,7 @@ export class Rider {
     // ---- muscles (forces between body parts; scaled by tone, mostly off once crashed)
     const hipM = x[J.hipL].add(x[J.hipR]).mul(0.5), hipV = v[J.hipL].add(v[J.hipR]).mul(0.5);
     const Fm = x.map(() => new V()), madd = (i, f) => { Fm[i] = Fm[i].add(f); };
-    if (tone > 0) {
+    if (tone > 0 && !this.crashed) {   // posture muscles only while riding; a detached rider is a true ragdoll
       // legs: hips relative to feet (stiffer laterally to lean with the bike)
       const e = hipT.sub(hipM), ev = this.velAt(b, hipT).sub(hipV);
       const eL = new V(e.dot(fwd), e.dot(up), e.dot(right)), evL = new V(ev.dot(fwd), ev.dot(up), ev.dot(right));
@@ -250,6 +255,12 @@ export class Rider {
     if (!this.crashed && (groundHit || gripErr > 0.22 || footErr > 0.25 || up.y < 0.1)) this.crash();
     if (this.crashed) this.tone = Math.max(0.12, this.tone - dt * 3);
     return ext;
+  }
+
+  // thrown off the bike: start the ragdoll from the animated pose and its velocities
+  fromPose(xs, vs) {
+    this.x = xs.map(p => new V(p.x, p.y, p.z)); this.v = vs.map(p => new V(p.x, p.y, p.z));
+    this.buildConstraints(); this.attached = false; this.crashed = true; this.tone = 0.6;
   }
 
   // spin the body as a whole about its centre of mass (no net force): used by the assist layer

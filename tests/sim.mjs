@@ -15,17 +15,10 @@ function run(name, s0, v0, secs, keysFn) {
   for (let i = 0; i < secs / dt; i++) {
     const t = i * dt; sys.step(dt, keysFn(t, bike));
     if (!bike.ok) { console.log(name, 'NaN at', t); return st; }
-    if (bike.crashed || rider.crashed) { st.crash = st.crash ?? t; }
+    if (bike.crashed) { st.crash = st.crash ?? t; }
     if (i % 20 === 0) { const f = bike.q.rot({ x: 1, y: 0, z: 0 }); log.push(`${t.toFixed(2)} s${nearestS(bike.p).toFixed(1)} v${bike.speed.toFixed(1)} lean${(bike.lean * 57.3).toFixed(0)} lt${(bike.leanT * 57.3).toFixed(0)} st${(bike.steer * 57.3).toFixed(0)} in${bike.inp.steer.toFixed(2)} pitch${(Math.asin(f.y) * 57.3).toFixed(0)} pF${bike.cF ? (bike.cF.pen * 1000).toFixed(0) + bike.cF.surf.name[0] : '-'} pR${bike.cR ? (bike.cR.pen * 1000).toFixed(0) + bike.cR.surf.name[0] : '-'} sF${(bike.sF * 1000).toFixed(0)} th${bike.th.toFixed(2)} aU${(bike.assist.info.upright || 0).toFixed(0)} aD${(bike.assist.info.dir || 0).toFixed(0)} aL${(bike.assist.info.landR || 0).toFixed(0)}`); }
     if (!dumped && bike.q.rot({ x: 0, y: 1, z: 0 }).y < 0.7) { dumped = true; console.log(log.slice(-150).filter((_, i) => i % 3 === 0).join('\n')); }
     if (t < 0.6) continue;
-    if (!rider.crashed) {
-      st.gE = Math.max(st.gE, rider.gripErr); st.fE = Math.max(st.fE, rider.footErr);
-      const hm = rider.x[J.hipL].add(rider.x[J.hipR]).mul(0.5), hl = bike.q.inv(hm.sub(bike.p));
-      const hy = hl.y + 0.3, hx = hl.x + 0.25; st.hMin = Math.min(st.hMin, hy); st.hMax = Math.max(st.hMax, hy); st.hxMin = Math.min(st.hxMin, hx); st.hxMax = Math.max(st.hxMax, hx);
-      const k = rider.x[J.hipL].sub(rider.x[J.ankL]).len(); st.kMin = Math.min(st.kMin, k); st.kMax = Math.max(st.kMax, k);
-      st.n++; if (rider.saddleLoad > 0) st.sad++; if (bike.air > 0.05) st.gap = Math.max(st.gap, hy - 0.8);
-    }
     const f = bike.sF / G.FORK.travel, r = bike.rearTravel / 0.18;
     st.fMin = Math.min(st.fMin, f); st.fMax = Math.max(st.fMax, f); st.rMin = Math.min(st.rMin, r); st.rMax = Math.max(st.rMax, r);
     st.air = Math.max(st.air, bike.air); st.leanMax = Math.max(st.leanMax, bike.lean); st.leanMin = Math.min(st.leanMin, bike.lean);
@@ -36,8 +29,6 @@ function run(name, s0, v0, secs, keysFn) {
   const p = bike.p, near = nearestS(p);
   const d = (x) => (x * 100).toFixed(0) + '%';
   console.log(`${name.padEnd(14)} fork ${d(st.fMin)}-${d(st.fMax)} rear ${d(st.rMin)}-${d(st.rMax)} air ${st.air.toFixed(2)}s lean ${(st.leanMin * 57.3).toFixed(0)}/${(st.leanMax * 57.3).toFixed(0)}° upMin ${st.upMin.toFixed(2)} vMax ${st.vMax.toFixed(1)} rim ${st.rim} bottom F${st.bF}/R${st.bR} forkRev ${st.fRev} ${st.crash !== undefined ? 'CRASH@' + st.crash.toFixed(1) + 's' : 'ok'} endS ${near.toFixed(0)} v ${bike.speed.toFixed(1)}`);
-  const c = (x) => (x * 100).toFixed(0);
-  console.log(`${''.padEnd(14)} rider: grip err ${c(st.gE)}cm foot err ${c(st.fE)}cm | hips BB y ${c(st.hMin)}-${c(st.hMax)}cm x ${c(st.hxMin)}..${c(st.hxMax)}cm | hip-ankle ${c(st.kMin)}-${c(st.kMax)}cm | on saddle ${(100 * st.sad / Math.max(1, st.n)).toFixed(0)}% | air hip lift ${c(st.gap)}cm`);
   return st;
 }
 function nearestS(p) { const { S, X, Z } = track.centerline; let b = 1e9, bs = 0; for (let i = 0; i < S.length; i += 2) { const d = (X[i] - p.x) ** 2 + (Z[i] - p.z) ** 2; if (d < b) { b = d; bs = S[i]; } } return bs; }
