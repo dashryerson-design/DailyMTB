@@ -28,6 +28,8 @@ export class RiderPose {
     s.accel = ease(s.accel, ip.thr, 4, dt);
     s.corner = ease(s.corner, clamp(b.lean || 0, -0.8, 0.8), 8, dt);
     s.side = ease(s.side ?? 0, ip.lean || 0, 7, dt);
+    const whip = s.side * s.air;                                       // mid-air style move (0 on the ground)
+    s.yawRel = ease(s.yawRel ?? 0, air ? (b.airYaw || 0) : 0, 10, dt);
     s.air = ease(s.air, air ? 1 : 0, 6, dt);
     if (!air && this.wasAir && b.lastAir > 0.15) s.land = Math.min(1, 0.4 + b.lastAir);
     this.wasAir = air; s.land = Math.max(0, s.land - dt * 2.2);
@@ -36,7 +38,7 @@ export class RiderPose {
     const tOff = b.torsoOff || new V();
     let hx = -0.23 + 0.07 * s.stand - 0.13 * s.brake + 0.04 * s.accel + clamp(tOff.x, -0.2, 0.2);
     let hy = 0.785 + 0.095 * s.stand + 0.05 * s.air - 0.13 * s.land + clamp(tOff.y, -0.12, 0.06);
-    const hz = clamp(tOff.z, -0.05, 0.05) - 0.05 * s.corner + 0.09 * s.side;
+    const hz = clamp(tOff.z, -0.05, 0.05) - 0.05 * s.corner + 0.09 * s.side + 0.2 * whip;   // hips throw out to the side in the air
     // never further than the legs can reach to either pedal
     const reach = (SEG.thigh + SEG.shin) * 0.97;
     for (const sd of [-1, 1]) { const pd = G.pedalAt(b.crank, sd), ax = pd[0] - 0.04, ay = pd[1] + 0.075;
@@ -44,7 +46,7 @@ export class RiderPose {
     const H = new V(hx, hy, hz);
     // ---- torso: forward lean angle from the posture, a little extra inward lean in corners
     const fwdLean = 0.62 + 0.25 * s.stand + 0.12 * s.accel - 0.2 * s.brake + 0.15 * s.land - 0.1 * s.air;
-    const tilt = -0.25 * s.corner + 0.3 * s.side;                                       // upper body drops into the turn
+    const tilt = -0.25 * s.corner + 0.3 * s.side - 0.75 * whip - 0.45 * (b.lean || 0) * s.air;   // airborne: body stays more upright while the bike lays over                                       // upper body drops into the turn
     const dir = (a, len) => new V(Math.sin(a) * len, Math.cos(a) * len * Math.cos(tilt), Math.cos(a) * len * Math.sin(tilt));
     const spine = H.add(dir(fwdLean * 0.55, SEG.lumbar));
     let neck = spine.add(dir(fwdLean, SEG.thorax));
@@ -56,18 +58,21 @@ export class RiderPose {
     }
     // head stays steadier than the body: blend its "up" toward world up, look ahead
     const wUp = b.q.inv(new V(0, 1, 0)), headUp = new V(0.35, 1, 0).norm().mul(0.5).add(wUp.mul(0.5)).norm();
+    // airborne: upper body counter-rotates to keep facing the direction of travel while the bike whips
+    const twist = -0.8 * (s.yawRel || 0) - 0.25 * whip, rotY = (p) => { const d = p.sub(spine), c = Math.cos(twist), sn = Math.sin(twist); return spine.add(new V(d.x * c + d.z * sn, d.y, -d.x * sn + d.z * c)); };
+    neck = rotY(neck);
     const head = neck.add(headUp.mul(SEG.neck)).add(new V(0.06, 0, 0));
     const P = new Array(17);
-    const tw = 0.35 * s.side;   // hips turn toward the lean
+    const tw = 0.35 * s.side + 0.6 * whip;   // hips turn toward the lean, hard in the air
     P[J.hipL] = H.add(new V(SEG.hipW * Math.sin(tw), 0, -SEG.hipW * Math.cos(tw))); P[J.hipR] = H.add(new V(-SEG.hipW * Math.sin(tw), 0, SEG.hipW * Math.cos(tw)));
     P[J.spine] = spine; P[J.neck] = neck; P[J.head] = head;
-    P[J.shL] = neck.add(new V(0, -0.03, -SEG.shW)); P[J.shR] = neck.add(new V(0, -0.03, SEG.shW));
+    P[J.shL] = rotY(neck.add(new V(0, -0.03, -SEG.shW)).sub(neck).add(spine)).sub(spine).add(neck); P[J.shR] = rotY(neck.add(new V(0, -0.03, SEG.shW)).sub(neck).add(spine)).sub(spine).add(neck);
     for (const [sd, k, gi] of [[-1, 'L', 0], [1, 'R', 1]]) {
       const pd = G.pedalAt(b.crank, sd);
       P[J['hand' + k]] = grips[gi];
       P[J['elb' + k]] = ik(P[J['sh' + k]], grips[gi], SEG.upper, SEG.fore, new V(-0.4, -0.5 - 0.3 * s.land, sd * 0.8));
       P[J['ank' + k]] = new V(pd[0] - 0.04, pd[1] + 0.075, sd * G.PEDAL_Z); P[J['toe' + k]] = new V(pd[0] + 0.11, pd[1] + 0.03, sd * G.PEDAL_Z);
-      P[J['knee' + k]] = ik(P[J['hip' + k]], P[J['ank' + k]], SEG.thigh, SEG.shin, new V(1, 0.25, sd * 0.18));
+      P[J['knee' + k]] = ik(P[J['hip' + k]], P[J['ank' + k]], SEG.thigh, SEG.shin, new V(1, 0.25, sd * 0.18 + 0.9 * whip));   // knees swing over with the hips
     }
     // ---- to world, plus per-joint velocities (needed if the rider is thrown off)
     const x = P.map(p => b.p.add(b.q.rot(p.sub(new V(COM[0], COM[1], 0)))));

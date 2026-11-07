@@ -66,9 +66,15 @@ export class Assist {
         const pr = w.dot(ctx.right);
         const tp = -A.landingAlign * urg * (1 - Math.min(1, Math.abs(b.inp.pitch))) *   // player's own pitch input takes priority
            (650 * pe + 110 * pr * (Math.abs(pe) > 0 ? 1 : 0.3));
-        const re = deadband(lean - L.bank - 0.35 * b.inp.lean, 0.07);   // ←/→ holds a mid-air tilt; released = back to level
+        const re = deadband(lean - L.bank - 0.75 * b.inp.lean, 0.07);   // ←/→ holds a mid-air tilt; released = back to level
         const tr = -A.landingRoll * Math.max(urg, 0.7 * Math.abs(b.inp.lean)) * (650 * re + 150 * leanRate);
-        T = T.add(ctx.right.mul(tp)).add(fh.mul(tr)).add(new V(0, -A.landingRoll * 20 * yawRate, 0));
+        // ←/→ whip: the bike also yaws out of line with the direction of travel (pure torques - the flight
+        // path stays the one set at take-off); released, it swings back in line for the landing
+        const vb = b.q.inv(b.v), rel = -Math.atan2(vb.z, vb.x);                // + = nose pointing right of travel
+        const yerr = rel - 0.8 * b.inp.lean, ky = Math.max(urg, 0.8 * Math.abs(b.inp.lean));
+        const ty = ky * (320 * yerr - 70 * w.y);
+        b.airYaw = rel;
+        T = T.add(ctx.right.mul(tp)).add(fh.mul(tr)).add(new V(0, ty, 0));
         info.landP = tp; info.landR = tr;
       }
     }
