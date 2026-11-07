@@ -284,7 +284,8 @@ export function buildTrack(seed = 7, opts = {}) {
     const rc2 = Math.ceil(rk.rr / res) + 1, ci = Math.round((p.x - minX) / res), cj = Math.round((p.z - minZ) / res);
     for (let j = cj - rc2; j <= cj + rc2; j++) for (let i = ci - rc2; i <= ci + rc2; i++) {
       const q = Math.hypot(minX + i * res - p.x, minZ + j * res - p.z) / rk.rr; if (q >= 1) continue;
-      const [t, id] = cell(i, j), hh = rk.base + rk.rh * Math.pow(1 - q * q, 0.9);
+      // rocks in the riding line are rounded humps you roll over; trail-side boulders keep their steep faces
+      const [t, id] = cell(i, j), inLine = !rk.side && !rk.face, hh = rk.base + (inLine ? 0.8 : 1) * rk.rh * Math.pow(1 - q * q, inLine ? 1.8 : 0.9);
       if (hh > t.H[id]) { t.H[id] = hh; t.SF[id] = SURF.ROCK; }
     }
   }

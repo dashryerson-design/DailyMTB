@@ -80,7 +80,7 @@ export class Bike {
     const p = c.add(u.mul(-Math.cos(ph) * R)).add(fw.mul(Math.sin(ph) * R));
     const nn = t.normal(p.x, p.z), n0 = new V(nn.x, nn.y, nn.z);
     // round tyre carcass: an off-centre hit mostly rolls over the casing, so damp the sideways component
-    const n = n0.sub(aw.mul(n0.dot(aw) * 0.6)).norm();
+    const n = n0.sub(aw.mul(n0.dot(aw) * 0.85)).norm();
     const pen = (t.h(p.x, p.z) - p.y) * n0.y; if (pen <= 0) return null;
     const sp = SURF_PROPS[t.surface(p.x, p.z)];
     const vn = vc.dot(n);
