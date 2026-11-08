@@ -272,6 +272,14 @@ export class Bike {
     this.w = q.rot(wbn);
     this.p = this.p.addS(this.v, dt);
     this.q = q.integrate(this.w, dt);
+    // wheels never sink in: past the tyre's squish (35 mm) the frame is pushed straight back out along the
+    // contact normal and any velocity into the ground is removed - no spring-up, no fling, no phasing
+    for (const c of [cF, cR]) {
+      if (!c || c.pen <= 0.035) continue;
+      const ex = Math.min(c.pen - 0.035, 0.1), vn = this.v.dot(c.n);
+      this.p = this.p.add(c.n.mul(ex)); this.pr = this.pr.add(c.n.mul(ex));
+      if (vn < 0) { this.v = this.v.sub(c.n.mul(vn)); this.vr = this.vr.sub(c.n.mul(Math.min(0, this.vr.dot(c.n)))); }
+    }
 
     // --- integrate suspension DOFs with hard mechanical stops
     this.sFd += sFdd * dt; this.sF += this.sFd * dt;
