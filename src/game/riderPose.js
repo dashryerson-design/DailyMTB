@@ -35,8 +35,11 @@ export class RiderPose {
     const whip = s.side * s.air;                                       // mid-air style move (0 on the ground)
     s.yawRel = ease(s.yawRel ?? 0, air ? (b.airYaw || 0) : 0, 10, dt);
     s.air = ease(s.air, air ? 1 : 0, 6, dt);
-    if (!air && this.wasAir && b.lastAir > 0.15) s.land = Math.min(1.3, 0.55 + 1.1 * b.lastAir);
-    this.wasAir = air; s.land = Math.max(0, s.land - dt * 1.5);
+    // landing absorb: a target that is set on touchdown and decays; the body eases into it over ~0.1 s
+    // (legs/arms soak it up) and rises back out smoothly - no instant drop
+    if (!air && this.wasAir && b.lastAir > 0.15) s.landT = Math.max(s.landT || 0, Math.min(1.3, 0.55 + 1.1 * b.lastAir));
+    this.wasAir = air; s.landT = Math.max(0, (s.landT || 0) - dt * 1.5);
+    s.land = ease(s.land, s.landT, s.landT > s.land ? 14 : 5, dt);
 
     // ---- pelvis: seated/standing base + the physics torso offset (bumps, landings, weight shift)
     const tOff = b.torsoOff || new V();
