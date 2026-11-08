@@ -6,6 +6,7 @@ import { BikeModel } from './render/bikeModel.js';
 import { RiderModel } from './render/riderModel.js';
 import { buildWorld, envMap } from './render/world.js';
 import { CameraRig, CAM_MODES } from './render/camera.js';
+import { Dust } from './render/dust.js';
 import { Input } from './game/input.js';
 const T = window.THREE;
 
@@ -21,7 +22,7 @@ renderer.outputEncoding = T.sRGBEncoding; renderer.toneMapping = T.ACESFilmicTon
 renderer.shadowMap.enabled = true; renderer.shadowMap.type = T.PCFSoftShadowMap;
 const scene = new T.Scene(), cam = new T.PerspectiveCamera(62, 1, 0.05, 700);
 scene.environment = envMap(renderer);
-const model = new BikeModel(scene), riderModel = new RiderModel(scene), input = new Input();
+const dust = new Dust(scene), model = new BikeModel(scene), riderModel = new RiderModel(scene), input = new Input();
 // ghost of the best run on this track: translucent copies of the bike + rider
 const ghost = { bike: new BikeModel(scene), rider: new RiderModel(scene) };
 for (const o of [ghost.bike.root, ghost.rider.group]) o.traverse(m => { if (m.material) { m.material = m.material.clone(); Object.assign(m.material, { transparent: true, opacity: 0.32, depthWrite: false }); m.castShadow = false; } });
@@ -145,6 +146,7 @@ function frame(now) {
     }
     const bx = sys.body(dt, view);
     model.update(view); riderModel.update({ x: bx }, view);
+    dust.update(paused ? 0 : dt, mode === 'ride' && !paused ? bike : null, track.h);
     while (L.started && !L.done && mode === 'ride' && L.rec.length <= L.runT * 30) {
       L.rec.push({ p: view.p, q: view.q, th: bike.th, sF: bike.sF, steer: bike.steer, wheelAngF: bike.wheelAngF, wheelAngR: bike.wheelAngR, crank: bike.crank, cassette: bike.cassette, chainPos: bike.chainPos, gear: bike.gear, x: bx.map(v => new V(v.x, v.y, v.z)), air: bike.air > 0.15 && bike.mounted, v: bike.v }); }
     const gr = L.best && mode === 'ride' && L.started ? L.best.rec : null; showGhost(!!gr && L.runT * 30 < gr.length - 1);
