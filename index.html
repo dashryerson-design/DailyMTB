@@ -65,6 +65,7 @@ kbd { font: 500 11px var(--mono); background: rgba(255,255,255,0.14); border-rad
 #finish .time { font: 800 italic 84px/1 var(--display); color: var(--orange); position: relative; }
 #progress { top: calc(12px + env(safe-area-inset-top, 0px)); left: 50%; transform: translateX(-50%); width: min(420px, 60vw); display: grid; gap: 6px; text-align: center; }
 #progress .clock { font: 600 26px/1 var(--mono); } #progress .bar i { background: var(--orange); }
+#toast { position: fixed; top: 22%; left: 50%; transform: translateX(-50%); font: 800 italic 44px/1 var(--display); letter-spacing: 0.06em; color: #e3b448; text-shadow: 0 4px 18px rgba(0,0,0,0.6); pointer-events: none; }
 #menuBtn { top: calc(12px + env(safe-area-inset-top, 0px)); right: max(12px, env(safe-area-inset-right, 0px)); cursor: pointer; color: var(--ink); border: 0; font: 600 12px var(--mono); letter-spacing: 0.1em; }
 @media (max-width: 760px) { .cards { grid-template-columns: 1fr; width: min(320px, 100%); } .card { aspect-ratio: 16 / 9; } }
 @media (max-width: 700px) { #help, #telemetry { display: none; } #stats { width: auto; right: 12px; } }
@@ -74,11 +75,12 @@ kbd { font: 500 11px var(--mono); background: rgba(255,255,255,0.14); border-rad
 <div id="hud" hidden>
 <div id="stats" class="panel"></div>
 <div id="progress" class="panel"><div class="clock" id="clock">0:00.0</div><span class="bar"><i id="prog" style="width:0%"></i></span><span class="cam" id="trackname"></span></div>
+<div id="toast" hidden></div>
 <button id="menuBtn" class="panel">MENU <kbd>Esc</kbd></button>
 <div id="help" class="panel">
   <h2 id="helpTitle">DailyMTB</h2>
   <div><kbd>W</kbd> pedal · <kbd>S</kbd> rear brake · <kbd>Space</kbd> front brake · <kbd>A</kbd>/<kbd>D</kbd> steer</div>
-  <div><kbd>↑</kbd>/<kbd>↓</kbd> weight fore/aft · <kbd>←</kbd>/<kbd>→</kbd> lean / air tilt · <kbd>R</kbd> restart section · <kbd>T</kbd> restart run · <kbd>C</kbd> camera · <kbd>P</kbd> pause</div>
+  <div><kbd>↑</kbd>/<kbd>↓</kbd> weight fore/aft · <kbd>←</kbd>/<kbd>→</kbd> lean / air tilt · <kbd>R</kbd> last checkpoint · <kbd>Del</kbd> back to start · <kbd>C</kbd> camera · <kbd>P</kbd> pause</div>
   <ul id="sections"></ul>
 </div>
 <div id="telemetry" class="panel">

@@ -63,7 +63,10 @@ function load(b) {
     if (L) { disposeTree(L.world); }
     const track = generateTrack(b), w = buildWorld(scene, track), sys = new RideSystem(track);
     w.root.add(gate(track, 6, 'START', '#f4efe6'), gate(track, track.total - 8, 'FINISH', '#ff6a1a'));
-    L = { track, sys, bike: sys.bike, rider: sys.rider, rig: new CameraRig(cam, track), world: w.root, sun: w.sun, clearView: w.clearView, section: 0, hist: [], visLean: 0, runT: 0, started: false, done: false, si: 0 };
+    // 5 checkpoints spread evenly along the run (nudged off jumps/drops so you never respawn on a lip)
+    const cps = [1, 2, 3, 4, 5].map(i => { let cs = track.total * i / 6; for (let k = 0; k < 40; k++) { const sg = track.segs.find(g => cs >= g.s0 - 2 && cs < g.s0 + g.len + 2); if (!sg || !sg.feat) break; cs = sg.s0 + sg.len + 4; } return cs; });
+    cps.forEach((cs, i) => w.root.add(gate(track, cs, `CHECKPOINT ${i + 1}`, '#e3b448')));
+    L = { track, sys, bike: sys.bike, rider: sys.rider, rig: new CameraRig(cam, track), world: w.root, sun: w.sun, clearView: w.clearView, cps, cp: 0, section: 0, hist: [], visLean: 0, runT: 0, started: false, done: false, si: 0 };
     const names = track.sections.slice(0, 9);
     $('sections').innerHTML = names.map((s, i) => `<li><kbd>${i + 1}</kbd> ${s.name}</li>`).join('');
     $('helpTitle').textContent = `${b} · ${(track.total / 1000).toFixed(2)} km`;
@@ -73,8 +76,11 @@ function load(b) {
   }, 60);
 }
 function spawn(i) { const s = L.track.sections[i].s; L.section = i; L.sys.reset(Math.max(4, s - (i ? 10 : 0)), i ? 7 : 0); L.rig.pos = null; L.hist.length = 0; L.si = 0; }
-function restartRun() { spawn(0); L.runT = 0; L.started = false; L.done = false; }
-input.on('KeyR', () => L && spawn(L.section));
+function restartRun() { spawn(0); L.cp = 0; L.runT = 0; L.started = false; L.done = false; toast(''); }
+function toCheckpoint() { if (!L.cp) return restartRun(); L.sys.reset(L.cps[L.cp - 1] - 2, 3); L.rig.pos = null; L.si = 0; L.done = false; toast(`CHECKPOINT ${L.cp}`); }
+let toastT = 0; function toast(t) { $('toast').textContent = t; $('toast').hidden = !t; toastT = 1.6; }
+input.on('KeyR', () => L && toCheckpoint());
+input.on('Delete', () => L && restartRun()); input.on('Backspace', () => L && restartRun());
 input.on('KeyT', () => L && restartRun());
 input.on('KeyC', () => L && L.rig.next());
 input.on('KeyP', () => { paused = !paused; });
@@ -111,6 +117,8 @@ function frame(now) {
       // run timer: starts when you get going, stops at the finish gate
       const s = trailS();
       if (!L.started && s > 8 && bike.speed > 0.5) L.started = true;
+      if (L.cp < 5 && s > L.cps[L.cp] && bike.mounted) { L.cp++; toast(`CHECKPOINT ${L.cp} / 5`); }
+      if (toastT > 0 && (toastT -= dt) <= 0) $('toast').hidden = true;
       if (L.started && !L.done && !bike.crashed) L.runT += dt;
       if (!L.done && s > track.total - 8 && bike.mounted) { L.done = true; $('finishTime').textContent = fmt(L.runT); $('finishInfo').textContent = `${track.biome} · ${(track.total / 1000).toFixed(2)} km`; mode = 'finished'; $('finish').hidden = false; }
       $('clock').textContent = fmt(L.runT); $('prog').style.width = `${clamp(s / track.total * 100, 0, 100).toFixed(1)}%`;
@@ -144,7 +152,7 @@ function hud() {
     <div class="row"><span>Shock shaft</span>${bar(xs / G.SHOCK.stroke)}<b>${(xs * 1000).toFixed(1)} / 63.5 mm</b></div>
     <div class="row"><span>Lean</span><b>${((bike.lean + L.visLean) * 57.3).toFixed(0)}°</b><span>Steer</span><b>${(bike.steer * 57.3).toFixed(0)}°</b></div>
     <div class="row"><span>Gear</span><b>${G.RING_T}×${G.COGS[bike.gear]}</b><span>Surface</span><b>${c ? c.surf.name : 'Airborne'}</b></div>
-    <div class="flags">${bike.air > 0.08 ? `<em>AIR ${bike.air.toFixed(2)} s</em>` : ''}${bike.bottomF > 0 ? '<em class="w">FORK BOTTOM-OUT</em>' : ''}${bike.bottomR > 0 ? '<em class="w">SHOCK BOTTOM-OUT</em>' : ''}${bike.rim > 0 ? '<em class="w">RIM STRIKE</em>' : ''}${bike.crashed ? '<em class="c">CRASHED · press R</em>' : ''}${bike.mounted && sys.pose.s.stand < 0.5 ? '<em>SEATED</em>' : ''}${paused ? '<em>PAUSED</em>' : ''}</div>
+    <div class="flags">${bike.air > 0.08 ? `<em>AIR ${bike.air.toFixed(2)} s</em>` : ''}${bike.bottomF > 0 ? '<em class="w">FORK BOTTOM-OUT</em>' : ''}${bike.bottomR > 0 ? '<em class="w">SHOCK BOTTOM-OUT</em>' : ''}${bike.rim > 0 ? '<em class="w">RIM STRIKE</em>' : ''}${bike.crashed ? '<em class="c">CRASHED · R = checkpoint</em>' : ''}${bike.mounted && sys.pose.s.stand < 0.5 ? '<em>SEATED</em>' : ''}${paused ? '<em>PAUSED</em>' : ''}</div>
     <div class="cam">Camera: ${CAM_MODES[L.rig.mode]} <kbd>C</kbd> · physics ${simBudget.toFixed(1)} ms/frame</div>`;
 }
 show('mainMenu');

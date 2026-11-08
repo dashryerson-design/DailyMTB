@@ -36,7 +36,7 @@ export class ArcadeBike {
     const g = t.h(p.x, p.z);
     this.cy = g + R + 0.35 + SYS[1] - 0.03; this.vy = 0;           // CoM height
     this.pitch = Math.atan2(t.h(p.x + Math.cos(p.psi) * 0.6, p.z + Math.sin(p.psi) * 0.6) - g, 0.6); this.pr8 = 0;
-    this.lean = 0; this.kap = 0; this.steer = 0; this.airYaw = 0; this.yawRate = 0;
+    this.lean = 0; this.leanB = 0; this.kap = 0; this.steer = 0; this.airYaw = 0; this.yawRate = 0;
     this.sF = SAG_F; this.sFd = 0; this.cR_ = SAG_R; this.cRd = 0; this.th = thForTravel(SAG_R); this.thd = 0;
     this.wheelAngF = 0; this.wheelAngR = 0; this.crank = Math.PI / 2; this.cassette = 0; this.chainPos = 0; this.gear = 0;
     this.inp = { thr: 0, bF: 0, bR: 0, steer: 0, pitch: 0, lean: 0 };
@@ -73,7 +73,8 @@ export class ArcadeBike {
 
     // ---- suspension: ground height under each wheel vs where the fully extended wheel would be
     const cp = Math.cos(this.pitch), sp = Math.sin(this.pitch);
-    const gF = this.groundUnder(XF), gR = this.groundUnder(XR);
+    const foot = (dx) => Math.max(this.groundUnder(dx), this.groundUnder(dx - 0.18), this.groundUnder(dx + 0.18));   // tyre footprint
+    const gF = foot(XF), gR = foot(XR);
     const extF = this.cy + XF * sp + HUB_YF * cp - R, extR = this.cy + XR * sp + HUB_YR * cp - R;
     const cF = gF - extF, cRr = gR - extR;                       // compression (negative = wheel off the ground)
     const cFd = (cF - (this._cF ?? cF)) / dt, cRd = (cRr - (this._cR ?? cRr)) / dt; this._cF = cF; this._cR = cRr;
@@ -120,12 +121,20 @@ export class ArcadeBike {
     const aLat = (sf.mu * 0.85 + 1.2 * Math.tan(bankIn)) * GRAV * (1 + 0.5 * combo);
     const kMax = Math.min(1 / (2.4 - 0.6 * combo), aLat / (v * v));
     if (grounded && !this.crashed) {
-      this.kap = ap(this.kap, ip.steer * kMax, 3.5);
+      // realistic order: input sets the lean you want, the bike rolls into it (takes a moment), and the turn
+      // comes from the lean (tan(lean) = v²·κ / g). Below walking pace you just point the bars.
+      const want = Math.atan(v * v * ip.steer * kMax / GRAV);
+      this.leanB = (this.leanB ?? 0) + clamp(want - (this.leanB ?? 0), -2.6 * dt, 2.6 * dt);
+      const kLean = GRAV * Math.tan(this.leanB) / (v * v), slow = clamp((3 - v) / 2.5, 0, 1);
+      let k = kLean * (1 - slow) + ip.steer * 0.42 * slow;
+      // asking for more than the tyres can hold: the bike drifts wide and scrubs speed
+      const over = Math.abs(k) * v * v - aLat; if (over > 0) { k = Math.sign(k) * aLat / (v * v); this.speed = Math.max(0, this.speed - over * 0.25 * dt); }
+      this.kap = ap(this.kap, k, 6);
       this.yawRate = this.speed * this.kap;
       this.psi += this.yawRate * dt;
       // lean = what the turn needs + the rider's own ←/→ lean
-      const leanT = clamp(Math.atan(this.speed * this.speed * this.kap / GRAV) + 0.35 * ip.lean * (1 - combo * 0.5), -1.0, 1.0);
-      this.lean += (leanT - this.lean) * Math.min(1, dt * 8);
+      const leanT = clamp(this.leanB * (1 - clamp((3 - v) / 2.5, 0, 1)) + 0.35 * ip.lean * (1 - combo * 0.5), -1.0, 1.0);
+      this.lean += (leanT - this.lean) * Math.min(1, dt * 10);
       this.visBank = Math.sign(this.kap) === Math.sign(bank) ? bank * clamp(Math.abs(this.kap) * 15, 0, 1) : 0;
       this.airYaw *= Math.max(0, 1 - dt * 12);
     } else if (!grounded && !this.crashed) {
@@ -154,7 +163,8 @@ export class ArcadeBike {
       this.air = 0;
     }
     // hard stop: never sink through the ground (deep compression beyond the bump stops)
-    const lowest = Math.max(gF - extF, gR - extR) - TRAVEL - 0.03; if (lowest > 0) { this.cy += lowest; if (this.vy < 0) this.vy = 0; this.rim = 0.3; } else this.rim = Math.max(0, this.rim - dt);
+    const bbY = this.cy - SYS[1] * Math.cos(this.pitch) - SYS[0] * Math.sin(this.pitch), gBB = this.groundUnder(-SYS[0]);
+    const lowest = Math.max(gF - extF - TRAVEL, gR - extR - TRAVEL, gBB + 0.12 - bbY); if (lowest > 0) { this.cy += lowest; if (this.vy < 0) this.vy = 0; this.rim = 0.3; } else this.rim = Math.max(0, this.rim - dt);
 
     // ---- suspension state for drawing / HUD
     const cfd = clamp(cF, 0, TRAVEL), crd = clamp(cRr, 0, TRAVEL);
