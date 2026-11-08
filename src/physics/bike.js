@@ -60,7 +60,7 @@ export class Bike {
     this.sF = G.FORK.sag; this.sFd = 0; this.th = 0; this.thd = 0;
     this.wF = speed / R; this.wR = speed / R; this.steer = 0; this.crank = Math.PI / 2; this.cassette = 0; this.gear = 0; this.chainPos = 0;
     this.leanT = 0; this.aPrev = new V(); this.inp = { thr: 0, bF: 0, bR: 0, steer: 0, pitch: 0, lean: 0 };
-    this.lrF = 0; this.bankF = 0; this.assist = this.assist || new Assist(); this.assist.reset(); this.assistT = new V(); this.lastAir = 0;
+    this.lrF = 0; this.bankF = 0; this.bankS = 0; this.carveS = 0; this.assist = this.assist || new Assist(); this.assist.reset(); this.assistT = new V(); this.lastAir = 0;
     this.crashed = false; this.cF = null; this.cR = null; this.air = 0; this.rim = 0; this.bottomF = 0; this.bottomR = 0; this.time = 0;
   }
 
@@ -117,21 +117,24 @@ export class Bike {
     this.fOff = this.cF ? 0 : (this.fOff || 0) + dt;   // front wheel skipping for a moment on a berm is not 'airborne'
     if (this.fOff > 0.08) { target = this.steer * (1 - 8 * dt); this.visBank = 0; }   // front wheel unloaded: steering does nothing, so straighten the bars for touchdown
     else if (vf > 1.2) {
-      const nb = this.track.normal(this.p.x, this.p.z), bank = Math.atan2(nb.x * rh.x + nb.z * rh.z, nb.y);   // + = surface tilted down to the right
+      const nb = this.track.normal(this.p.x, this.p.z), bank0 = Math.atan2(nb.x * rh.x + nb.z * rh.z, nb.y);
+      // the ground under the bike flips fast at a berm's lip/exit: everything below uses a smoothed bank so the
+      // assists fade out over ~0.4 s instead of snapping off (which yanked the steering and threw the bike)
+      this.bankS = (this.bankS ?? 0) + (bank0 - (this.bankS ?? 0)) * Math.min(1, dt / 0.25); const bank = this.bankS;   // + = surface tilted down to the right
       // A/D + ←/→ the same way = committed carve: the rider throws the bike much further over and turns far
       // tighter. How far depends on what the ground can hold: a little on the flat, a lot on a berm banked into the turn
       const combo = Math.abs(ip.steer) > 0.1 && Math.sign(ip.lean) === Math.sign(ip.steer) ? Math.abs(ip.lean) : 0;
       const bankIn = Math.max(0, Math.sign(ip.steer) * bank), aCarve = Math.min(vf * vf / 2.2, GRAV * Math.tan(Math.min(0.85, 0.66 + 0.4 * bankIn)));
-      this.carve = { combo, bankIn, dir: Math.sign(ip.steer) };
-      const aLat = ip.steer * (maxLatAccel(vf) + combo * Math.max(0, aCarve - maxLatAccel(vf)));
-      this.leanT = ap(this.leanT, Math.atan(aLat / GRAV), ASSIST.leanRate * (1 + 1.2 * combo));
+      this.carveS = ap(this.carveS ?? 0, combo, 3); this.carve = { combo: this.carveS, bankIn, dir: Math.sign(ip.steer) || (this.carve && this.carve.dir) || 1 };
+      const aLat = ip.steer * (maxLatAccel(vf) + this.carveS * Math.max(0, aCarve - maxLatAccel(vf)));
+      this.leanT = ap(this.leanT, Math.atan(aLat / GRAV), ASSIST.leanRate * (1 + 1.2 * this.carveS));
       // ←/→: rider tips the bike further over (balance handled by the steering), but only as far as the grip
       // allows: ~35° on flat ground, more on a berm that leans the same way
       // ←/→ tips the bike over a bit more, using only the lean margin the turn hasn't already used up
       const margin = clamp(1 - Math.abs(this.leanT) / (0.85 + 0.5 * Math.max(0, Math.sign(this.leanT) * bank)), 0, 1);
       // the bank this turn is ridden on (same side as the turn); used to draw the bike leaning relative to the
       // surface. Physics balance stays in world terms, so it is NOT added to the balance target here.
-      this.bankF = (this.bankF ?? 0) + (bank - (this.bankF ?? 0)) * Math.min(1, dt / 0.15);
+      this.bankF = (this.bankF ?? 0) + (bank - (this.bankF ?? 0)) * Math.min(1, dt / 0.2);
       const turnSide = Math.abs(this.leanT) > 0.03 ? Math.sign(this.leanT) : Math.sign(ip.lean);
       // fades in with how committed the turn is (no on/off flicker when lean or bank crosses zero)
       const bankAdd = Math.max(0, Math.sign(turnSide) * this.bankF) * Math.sign(turnSide) * clamp((Math.abs(this.leanT) + Math.abs(ip.lean) * 0.3) / 0.2, 0, 1);
@@ -142,7 +145,7 @@ export class Bike {
       this.lrF = (this.lrF ?? 0) + (leanRate - (this.lrF ?? 0)) * Math.min(1, dt / 0.04);   // impacts make raw roll rate spiky
       target = ff + Kp * (lean - leanT) + Kd * clamp(this.lrF, -1.5, 1.5);
       this.leanTarget = leanT;
-    } else { target = ip.steer * 0.6; this.leanT = lean; this.carve = null; this.visBank = 0; }
+    } else { target = ip.steer * 0.6; this.leanT = lean; this.carve = null; this.carveS = 0; this.visBank = 0; }
     const maxSteer = 0.75 / (1 + 0.05 * vabs);
     this.steer = ap(this.steer, clamp(target, -maxSteer, maxSteer), ASSIST.steerRate);
 
@@ -252,7 +255,7 @@ export class Bike {
       const wx = 1.6 * strength, wNow = -this.w.y * cv.dir;               // extra yaw rate wanted (rad/s), current (+ = into turn)
       const tq = (this.mounted ? 260 : 40) * clamp(wx - Math.max(0, wNow - Math.abs(vf * Math.tan(this.steer) / G.WHEELBASE)), -1, 1);
       T = T.add(new V(0, -cv.dir * tq, 0));
-      F = F.add(rh.mul(cv.dir * (this.mounted ? 94 : 15) * vf * wx * 0.6));
+      F = F.add(rh.mul(cv.dir * (this.mounted ? 94 : 15) * vf * Math.min(wx, Math.max(0, wNow)) * 0.6));   // only the push that matches the yaw actually happening (no sideways shove)
     }
     // --- low-speed foot-dab balance (a foot touching the ground), external
     const dab = grounded ? clamp((3 - vf) / 2, 0, 1) : 0;
