@@ -194,6 +194,7 @@ function replayFrame(dt) { showGhost(false);
   cam.position.set(R.pos.x, R.pos.y, R.pos.z); cam.lookAt(R.look.x, R.look.y, R.look.z); L.clearView(cam.position);
   L.sun.position.set(f.p.x + 30, f.p.y + 60, f.p.z + 20); L.sun.target.position.set(f.p.x, f.p.y, f.p.z);
 }
+const CAUSE = { head: 'head hit the ground', torso: 'body hit the ground', 'upside down': 'bike tipped over' };
 function hud() {
   const { bike, sys } = L, f = bike.sF, xs = bike.shockStroke, rt = bike.rearTravel, c = bike.cF || bike.cR;
   const bar = (v) => `<span class="bar"><i style="width:${Math.min(100, v * 100).toFixed(0)}%"></i></span>`;
@@ -204,7 +205,7 @@ function hud() {
     <div class="row"><span>Shock shaft</span>${bar(xs / G.SHOCK.stroke)}<b>${(xs * 1000).toFixed(1)} / 63.5 mm</b></div>
     <div class="row"><span>Lean</span><b>${((bike.lean + L.visLean) * 57.3).toFixed(0)}°</b><span>Steer</span><b>${(bike.steer * 57.3).toFixed(0)}°</b></div>
     <div class="row"><span>Gear</span><b>${G.RING_T}×${G.COGS[bike.gear]}</b><span>Surface</span><b>${c ? c.surf.name : 'Airborne'}</b></div>
-    <div class="flags">${bike.air > 0.08 ? `<em>AIR ${bike.air.toFixed(2)} s</em>` : ''}${bike.bottomF > 0 ? '<em class="w">FORK BOTTOM-OUT</em>' : ''}${bike.bottomR > 0 ? '<em class="w">SHOCK BOTTOM-OUT</em>' : ''}${bike.rim > 0 ? '<em class="w">RIM STRIKE</em>' : ''}${bike.crashed ? '<em class="c">CRASHED (${{ head: 'head hit the ground', torso: 'body hit the ground', 'upside down': 'bike tipped over' }[bike.crashCause] || bike.crashCause}) · R = checkpoint</em>' : ''}${bike.mounted && sys.pose.s.stand < 0.5 ? '<em>SEATED</em>' : ''}${paused ? '<em>PAUSED</em>' : ''}</div>
+    <div class="flags">${bike.air > 0.08 ? `<em>AIR ${bike.air.toFixed(2)} s</em>` : ''}${bike.bottomF > 0 ? '<em class="w">FORK BOTTOM-OUT</em>' : ''}${bike.bottomR > 0 ? '<em class="w">SHOCK BOTTOM-OUT</em>' : ''}${bike.rim > 0 ? '<em class="w">RIM STRIKE</em>' : ''}${bike.crashed ? `<em class="c">CRASHED (${CAUSE[bike.crashCause] || bike.crashCause}) · R = checkpoint</em>` : ''}${bike.mounted && sys.pose.s.stand < 0.5 ? '<em>SEATED</em>' : ''}${paused ? '<em>PAUSED</em>' : ''}</div>
     <div class="cam">Camera: ${CAM_MODES[L.rig.mode]} <kbd>C</kbd> · physics ${simBudget.toFixed(1)} ms/frame</div>`;
 }
 show('mainMenu');
