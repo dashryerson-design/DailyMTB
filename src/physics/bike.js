@@ -236,8 +236,14 @@ export class Bike {
       F = F.sub(fr); T = T.add(rA.cross(fr.mul(-1))); this.torsoOff = dl;
       T = T.add(right.mul(ip.pitch * 110));                 // bar/pedal push-pull against the body
       // crash: head/torso into the ground, or the bike upside down
-      for (const off of [0, 0.42]) { const hp = this.pr.add(up.mul(off)); if (this.track.h(hp.x, hp.z) > hp.y - (off ? 0.02 : 0.1)) { this.crashed = true; this.crashCause = off ? 'head' : 'torso'; } }
-      if (up.y < 0.1) { this.crashed = true; this.crashCause = 'upside down'; }
+      // leaning far fore/aft (wheelies, nose-dives, steep rolls) is not a crash by itself: the body only counts
+      // as hitting the ground if it stays there (~0.25 s) or the head goes in; tipped over only means a real
+      // sideways fall or properly flipped (looped out / over the bars)
+      let body = false;
+      for (const off of [0, 0.42]) { const hp = this.pr.add(up.mul(off)); if (this.track.h(hp.x, hp.z) > hp.y - (off ? -0.02 : 0.05)) { if (off) { this.crashed = true; this.crashCause = 'head'; } else body = true; } }
+      this.bodyT = body ? (this.bodyT || 0) + dt : 0; if (this.bodyT > 0.25) { this.crashed = true; this.crashCause = 'torso'; }
+      const pitchA = Math.asin(clamp(q.rot(new V(1, 0, 0)).y, -1, 1));
+      if ((up.y < 0.1 && Math.abs(pitchA) < 1.0) || up.y < -0.35) { this.crashed = true; this.crashCause = 'upside down'; }
     }
     for (const e of ext) { F = F.add(e.f); T = T.add(e.p.sub(this.p).cross(e.f)); if (e.t) T = T.add(e.t); }
 
