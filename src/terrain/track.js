@@ -226,11 +226,12 @@ export function buildTrack(seed = 7, opts = {}) {
   const M = biome === 'test' ? 40 : 70; minX -= M; minZ -= M; maxX += M; maxZ += M;
   const cr = 2, cnx = Math.ceil((maxX - minX) / cr) + 2, cnz = Math.ceil((maxZ - minZ) / cr) + 2, CH = new Float32Array(cnx * cnz), CD = new Float32Array(cnx * cnz);
   const step = biome === 'test' ? 8 : 12, side = biome === 'test' ? 0 : (seed & 1 ? 1 : -1);   // which side of the trail the mountain rises on
+  const ELF = S.map(elev);   // actual riding height (incl. height lost at drops/jumps) so the land never towers over the trail
   for (let j = 0; j < cnz; j++) for (let i = 0; i < cnx; i++) {
     const px = minX + i * cr, pz = minZ + j * cr; let ws = 0, we = 0, dm = 1e9, sd = 0;
     for (let k = 0; k < NS; k += step) {
       const dx = px - X[k], dz = pz - Z[k], d2 = dx * dx + dz * dz; if (d2 < dm) { dm = d2; sd = -dx * Math.sin(PSI[k]) + dz * Math.cos(PSI[k]); }
-      if (d2 < 9000) { const w = Math.exp(-d2 / 800); ws += w; we += w * EL[k]; }
+      if (d2 < 9000) { const w = Math.exp(-d2 / 800); ws += w; we += w * ELF[k]; }
     }
     const dist = Math.sqrt(dm), base = ws > 1e-9 ? we / ws : elev(S[NS - 1]), far = smooth((dist - 8) / 40);
     const ridged = 1 - Math.abs(noise(px / 110, pz / 110)), mtn = B.ridge * ridged * ridged * far;
