@@ -19,7 +19,7 @@ const INERTIA = new V(0.7, 1.8, 1.9);             // frame roll, yaw, pitch abou
 // Mounted rider (no ragdoll while riding): arms/legs ride rigidly with the frame, the torso is ONE mass point
 // held by the legs/arms spring-damper. That single point gives the bike the rider's real weight, weight
 // transfer and impact absorption; everything else about the rider is procedural animation (render/riderPose.js).
-export const TORSO = { m: 62, anchor: [0.0, 0.86], k: new V(12000, 6000, 50000), c: new V(1300, 900, 3000), shift: 0.16 };
+export const TORSO = { m: 62, anchor: [0.0, 0.86], k: new V(12000, 4200, 50000), c: new V(1300, 620, 3000), shift: 0.16 };
 const LIMB_M = 17, MOUNTED_I = new V(1.6, 2.6, 3.2);
 const SYS_ROLL_I = 12;                            // rider+bike roll inertia about CoM (for balance gains)
 const MU_F = 3.2, MU_R = 4.2;                    // unsprung masses (kg)

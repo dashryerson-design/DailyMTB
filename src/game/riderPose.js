@@ -35,13 +35,13 @@ export class RiderPose {
     const whip = s.side * s.air;                                       // mid-air style move (0 on the ground)
     s.yawRel = ease(s.yawRel ?? 0, air ? (b.airYaw || 0) : 0, 10, dt);
     s.air = ease(s.air, air ? 1 : 0, 6, dt);
-    if (!air && this.wasAir && b.lastAir > 0.15) s.land = Math.min(1, 0.4 + b.lastAir);
-    this.wasAir = air; s.land = Math.max(0, s.land - dt * 2.2);
+    if (!air && this.wasAir && b.lastAir > 0.15) s.land = Math.min(1.3, 0.55 + 1.1 * b.lastAir);
+    this.wasAir = air; s.land = Math.max(0, s.land - dt * 1.5);
 
     // ---- pelvis: seated/standing base + the physics torso offset (bumps, landings, weight shift)
     const tOff = b.torsoOff || new V();
     let hx = -0.23 + 0.07 * s.stand - 0.13 * s.brake + 0.04 * s.accel + clamp(tOff.x, -0.2, 0.2);
-    let hy = 0.785 + 0.095 * s.stand + 0.05 * s.air - 0.13 * s.land + clamp(tOff.y, -0.12, 0.06) - 0.012 * pa * sw2;
+    let hy = 0.785 + 0.095 * s.stand + 0.05 * s.air - 0.17 * s.land + clamp(tOff.y, -0.2, 0.06) - 0.012 * pa * sw2;
     const hz = clamp(tOff.z, -0.05, 0.05) - 0.05 * s.corner + 0.09 * s.side + 0.2 * whip + 0.05 * pa * sw;   // hips throw out in the air; drive over each pedal stroke
     // never further than the legs can reach to either pedal
     const reach = (SEG.thigh + SEG.shin) * 0.97;
@@ -49,7 +49,7 @@ export class RiderPose {
       hy = Math.min(hy, ay + Math.sqrt(Math.max(0.01, reach * reach - (hx - ax) ** 2 - (sd * (G.PEDAL_Z - SEG.hipW)) ** 2))); }
     const H = new V(hx, hy, hz);
     // ---- torso: forward lean angle from the posture, a little extra inward lean in corners
-    const fwdLean = 0.62 + 0.25 * s.stand + 0.12 * s.accel - 0.2 * s.brake + 0.15 * s.land - 0.1 * s.air;
+    const fwdLean = 0.62 + 0.25 * s.stand + 0.12 * s.accel - 0.2 * s.brake + 0.3 * s.land - 0.1 * s.air;
     // lower torso goes with the hips (and the whip); the chest/shoulders stay level with the world in the air
     const tilt = -0.25 * s.corner + 0.3 * s.side - 0.75 * whip - 0.45 * (b.lean || 0) * s.air + 0.13 * pa * sw;
     const tiltU = (-0.25 * s.corner + 0.3 * s.side) * (1 - s.air) - (b.lean || 0) * s.air - 0.09 * pa * sw;   // shoulders counter the hips
