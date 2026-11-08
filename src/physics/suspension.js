@@ -8,9 +8,9 @@ function damper(v, c) {
 export class AirFork {
   // F(s) = F0 + k s + k3 s^3 (air-spring progression), F0 set so static sag hits target
   constructor(travel, staticLoad, sag) {
-    this.travel = travel; this.k = 4200; this.k3 = 290000;
+    this.travel = travel; this.k = 3800; this.k3 = 310000;
     this.F0 = staticLoad - this.k * sag - this.k3 * sag ** 3;
-    this.damp = { ls: 250, hs: 75, knee: 0.35, rls: 430, rhs: 240, rknee: 0.5 };
+    this.damp = { ls: 200, hs: 65, knee: 0.35, rls: 290, rhs: 180, rknee: 0.5 };
     this.bumper = 0.012; this.kBump = 3e6;
   }
   spring(s) { return this.F0 + this.k * s + this.k3 * s * s * s; }
@@ -27,7 +27,7 @@ export class CoilShock {
   constructor(stroke, k, lev) {
     this.stroke = stroke; this.k = k; this.preload = 0;
     const L2 = lev * lev;  // convert wheel-referenced damping to shaft-referenced
-    this.damp = { ls: 330 * L2, hs: 100 * L2, knee: 0.35 / lev, rls: 560 * L2, rhs: 270 * L2, rknee: 0.5 / lev };
+    this.damp = { ls: 200 * L2, hs: 70 * L2, knee: 0.35 / lev, rls: 560 * L2, rhs: 270 * L2, rknee: 0.5 / lev };
     this.bumper = 0.006; this.kBump = 3.2e7;
   }
   force(x, v) {
