@@ -85,8 +85,8 @@ export class Assist {
         // ←/→ whip: the bike also yaws out of line with the direction of travel (pure torques - the flight
         // path stays the one set at take-off); released, it swings back in line for the landing
         const vb = b.q.inv(b.v), rel = -Math.atan2(vb.z, vb.x);                // + = nose pointing right of travel
-        const yerr = rel - 0.8 * b.inp.lean, ky = Math.max(urg, 0.8 * Math.abs(b.inp.lean));
-        const ty = ky * (320 * yerr - 70 * w.y);
+        const yerr = rel - 1.35 * b.inp.lean, ky = Math.max(urg, 1.3 * Math.abs(b.inp.lean));   // big whip: tail thrown ~75° out
+        const ty = ky * (420 * yerr - 80 * w.y);
         b.airYaw = rel;
         T = T.add(ctx.right.mul(tp)).add(fh.mul(tr)).add(new V(0, ty, 0));
         info.landP = tp; info.landR = tr;
