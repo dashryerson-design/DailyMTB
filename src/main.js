@@ -22,6 +22,10 @@ renderer.shadowMap.enabled = true; renderer.shadowMap.type = T.PCFSoftShadowMap;
 const scene = new T.Scene(), cam = new T.PerspectiveCamera(62, 1, 0.05, 700);
 scene.environment = envMap(renderer);
 const model = new BikeModel(scene), riderModel = new RiderModel(scene), input = new Input();
+// ghost of the best run on this track: translucent copies of the bike + rider
+const ghost = { bike: new BikeModel(scene), rider: new RiderModel(scene) };
+for (const o of [ghost.bike.root, ghost.rider.group]) o.traverse(m => { if (m.material) { m.material = m.material.clone(); Object.assign(m.material, { transparent: true, opacity: 0.32, depthWrite: false }); m.castShadow = false; } });
+const showGhost = (v) => { ghost.bike.root.visible = ghost.rider.group.visible = v; }; showGhost(false);
 const resize = () => { const w = innerWidth, h = innerHeight; renderer.setSize(w, h, false); cam.aspect = w / h; cam.updateProjectionMatrix(); };
 addEventListener('resize', resize); resize();
 
@@ -40,7 +44,7 @@ document.querySelectorAll('.exbtn').forEach(c => c.onclick = () => load(c.datase
 $('replayBtn').onclick = () => startReplay();
 $('replayExit').onclick = () => endReplay();
 $('newBtn').onclick = () => load(L.track.biome, L.extreme);
-$('againBtn').onclick = () => { show('hud'); restartRun(); };
+$('againBtn').onclick = () => { show('hud'); restartRun(); mode = 'ride'; };
 $('menuBtn2').onclick = $('menuBtn').onclick = () => toMenu();
 addEventListener('keydown', (e) => { if (e.code === 'Escape' && mode === 'replay') endReplay(); else if (e.code === 'Escape' && mode === 'ride') toMenu(); });
 function toMenu() { mode = 'menu'; show('biomeMenu'); }
@@ -69,7 +73,7 @@ function load(b, extreme = false) {
     // 5 checkpoints spread evenly along the run (nudged off jumps/drops so you never respawn on a lip)
     const cps = [1, 2, 3, 4, 5].map(i => { let cs = track.total * i / 6; for (let k = 0; k < 40; k++) { const sg = track.segs.find(g => cs >= g.s0 - 2 && cs < g.s0 + g.len + 2); if (!sg || !sg.feat) break; cs = sg.s0 + sg.len + 4; } return cs; });
     cps.forEach((cs, i) => w.root.add(gate(track, cs, `CHECKPOINT ${i + 1}`, '#e3b448')));
-    L = { track, sys, bike: sys.bike, rider: sys.rider, rig: new CameraRig(cam, track), world: w.root, sun: w.sun, clearView: w.clearView, cps, cp: 0, section: 0, hist: [], visLean: 0, runT: 0, started: false, done: false, si: 0, extreme, rec: [], recT: 0 };
+    L = { track, sys, bike: sys.bike, rider: sys.rider, rig: new CameraRig(cam, track), world: w.root, sun: w.sun, clearView: w.clearView, cps, cp: 0, section: 0, hist: [], visLean: 0, runT: 0, started: false, done: false, si: 0, extreme, rec: [], recT: 0, best: null };
     const names = track.sections.slice(0, 9);
     $('sections').innerHTML = names.map((s, i) => `<li><kbd>${i + 1}</kbd> ${s.name}</li>`).join('');
     $('helpTitle').textContent = `${b} · ${(track.total / 1000).toFixed(2)} km`;
@@ -123,7 +127,8 @@ function frame(now) {
       if (L.cp < 5 && s > L.cps[L.cp] && bike.mounted) { L.cp++; toast(`CHECKPOINT ${L.cp} / 5`); }
       if (toastT > 0 && (toastT -= dt) <= 0) $('toast').hidden = true;
       if (L.started && !L.done && !bike.crashed) L.runT += dt;
-      if (!L.done && s > track.total - 8 && bike.mounted) { L.done = true; $('finishTime').textContent = fmt(L.runT); $('finishInfo').textContent = `${L.extreme ? 'extreme ' : ''}${track.biome} · ${(track.total / 1000).toFixed(2)} km`; mode = 'finished'; $('finish').hidden = false; }
+      if (!L.done && s > track.total - 8 && bike.mounted) { L.done = true; const prev = L.best, pb = !prev || L.runT < prev.t; if (pb) L.best = { t: L.runT, rec: L.rec };
+        $('finishTime').textContent = fmt(L.runT); $('finishInfo').textContent = (prev ? (pb ? `NEW BEST −${(prev.t - L.runT).toFixed(2)}s · ` : `+${(L.runT - prev.t).toFixed(2)}s vs best ${fmt(prev.t)} · `) : '') + `${L.extreme ? 'extreme ' : ''}${track.biome} · ${(track.total / 1000).toFixed(2)} km`; mode = 'finished'; $('finish').hidden = false; }
       $('clock').textContent = fmt(L.runT); $('prog').style.width = `${clamp(s / track.total * 100, 0, 100).toFixed(1)}%`;
     }
     hud(); drawGraph();
@@ -140,8 +145,10 @@ function frame(now) {
     }
     const bx = sys.body(dt, view);
     model.update(view); riderModel.update({ x: bx }, view);
-    if (L.started && !L.done && mode === 'ride' && !paused && (L.recT += dt) >= 1 / 30) { L.recT = 0;
+    while (L.started && !L.done && mode === 'ride' && L.rec.length <= L.runT * 30) {
       L.rec.push({ p: view.p, q: view.q, th: bike.th, sF: bike.sF, steer: bike.steer, wheelAngF: bike.wheelAngF, wheelAngR: bike.wheelAngR, crank: bike.crank, cassette: bike.cassette, chainPos: bike.chainPos, gear: bike.gear, x: bx.map(v => new V(v.x, v.y, v.z)), air: bike.air > 0.15 && bike.mounted, v: bike.v }); }
+    const gr = L.best && mode === 'ride' && L.started ? L.best.rec : null; showGhost(!!gr && L.runT * 30 < gr.length - 1);
+    if (gr && ghost.bike.root.visible) { const g = poseAt(gr, L.runT); ghost.bike.update(g.f); ghost.rider.update({ x: g.x }, g.f); }
     let camT = bike; if (!bike.mounted) { camT = Object.create(bike); camT.p = rider.com; camT.v = rider.v[0].mul(0); }
     L.rig.update(dt, camT); L.clearView(cam.position);
     L.sun.position.set(bike.p.x + 30, bike.p.y + 60, bike.p.z + 20); L.sun.target.position.set(bike.p.x, bike.p.y, bike.p.z);
@@ -156,12 +163,16 @@ function startReplay() { if (!L || L.rec.length < 10) return; mode = 'replay'; R
 function endReplay() { mode = 'finished'; $('replayBar').hidden = true; document.body.classList.remove('cinema'); $('hud').hidden = false; $('finish').hidden = false; }
 const lv = (a, b, u) => a.add(b.sub(a).mul(u));
 const lq = (a, b, u) => { const d = a.w * b.w + a.x * b.x + a.y * b.y + a.z * b.z, sg = d < 0 ? -1 : 1, q = new Q(a.w + (sg * b.w - a.w) * u, a.x + (sg * b.x - a.x) * u, a.y + (sg * b.y - a.y) * u, a.z + (sg * b.z - a.z) * u), l = Math.hypot(q.w, q.x, q.y, q.z); return new Q(q.w / l, q.x / l, q.y / l, q.z / l); };
-function replayFrame(dt) {
-  const rec = L.rec, tr = L.track, n = rec.length, i0 = Math.min(n - 2, Math.floor(R.t * 30)), u = clamp(R.t * 30 - i0, 0, 1), a = rec[i0], b = rec[i0 + 1];
-  R.t += dt * (a.air ? 0.35 : 1); if (R.t * 30 >= n - 1) { R.t = 0; R.shot = -1; }
+function poseAt(rec, t) {
+  const n = rec.length, i0 = clamp(Math.floor(t * 30), 0, n - 2), u = clamp(t * 30 - i0, 0, 1), a = rec[i0], b = rec[i0 + 1];
   const f = Object.create(L.bike); for (const k of ['th', 'sF', 'steer', 'wheelAngF', 'wheelAngR', 'crank', 'cassette', 'chainPos']) f[k] = a[k] + (b[k] - a[k]) * u;
   f.gear = a.gear; f.p = lv(a.p, b.p, u); f.q = lq(a.q, b.q, u);
-  model.update(f); riderModel.update({ x: a.x.map((p, k) => lv(p, b.x[k], u)) }, f);
+  return { f, a, b, u, i0, x: a.x.map((p, k) => lv(p, b.x[k], u)) };
+}
+function replayFrame(dt) { showGhost(false);
+  const rec = L.rec, tr = L.track, n = rec.length, P = poseAt(rec, R.t), { f, a, b, u, i0 } = P;
+  R.t += dt * (a.air ? 0.35 : 1); if (R.t * 30 >= n - 1) { R.t = 0; R.shot = -1; }
+  model.update(f); riderModel.update({ x: P.x }, f);
   const vel = lv(a.v, b.v, u), fh = new V(vel.x, 0, vel.z).len() > 0.5 ? new V(vel.x, 0, vel.z).norm() : new V(1, 0, 0), rt = new V(-fh.z, 0, fh.x);
   if ((R.shotT -= dt) <= 0 || R.shot < 0) { R.shot = (R.shot + 1 + Math.floor(Math.random() * 3)) % 4; R.shotT = 3.5; R.pos = null;
     const ahead = rec[Math.min(n - 1, i0 + 75)].p, sd = Math.random() < 0.5 ? -1 : 1; R.anchor = ahead.add(rt.mul(sd * (4 + Math.random() * 3)));
