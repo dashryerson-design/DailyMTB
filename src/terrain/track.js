@@ -74,8 +74,8 @@ export const BIOMES = {
 const W = 1.7;        // tread half-width (3.4 m wide trail)
 
 // generate a downhill run: features are the proven shapes below, placed with rideability rules
-export function generateLayout(seed, biome) {
-  const r = rng(seed * 7919 + 13), B = BIOMES[biome], target = 330 + r() * 520;   // 0.3-0.9 km runs
+export function generateLayout(seed, biome, extreme = false) {
+  const r = rng(seed * 7919 + 13), B = extreme ? { ...BIOMES[biome], w: { jump: 7, drop: 4.5, berm: 2.2, descent: 1.2, turn: 1.2, bumps: 0.4 } } : BIOMES[biome], target = 330 + r() * 520;   // 0.3-0.9 km runs
   const out = [{ len: 16, name: 'Start', grade: 0.1 }];
   let heading = 0, s = 30, n = 0, last = '';
   const names = { berm: 'Berm', bumps: biome === 'forest' ? 'Root garden' : 'Rock garden', rollers: 'Rollers', table: 'Tabletop', bigjump: 'Big jump', drop: 'Drop', rockslab: biome === 'desert' ? 'Sandstone slabs' : 'Rock slab', tech: 'Tech turns', ice: 'Ice patch', sand: 'Sand wash' };
@@ -107,12 +107,12 @@ export function generateLayout(seed, biome) {
       case 'sand': push({ len: 12 + r() * 10, surf: SURF.SAND, grade: 0.12, name: names.sand }); break;
       case 'rollers': { const nR = 2 + Math.floor(r() * 5), H = 0.3 + r() * 0.5, sp = 5 + r() * 3;
         push({ len: 10 + r() * 8, grade: 0.16 }); push({ len: 4 + nR * sp, feat: 'rollersP', nR, H, sp, grade: 0.14, name: nR > 4 ? 'Pump track' : 'Rollers' }); push({ len: 8 + r() * 6, grade: 0.14 }); break; }
-      case 'drop': { const dh = 0.6 + r() * 1.2; push({ len: 12 + r() * 8, grade: 0.16 });
-        push({ len: 20, feat: 'dropP', dropH: dh, dropAt: 8, grade: 0.12, name: dh > 1.3 ? 'Big drop' : 'Drop' }); push({ len: 14 + r() * 6, grade: 0.14 }); break; }
+      case 'drop': { const dh = extreme ? 1.6 + r() * 1.6 : 0.6 + r() * 1.2; push({ len: 12 + r() * 8, grade: 0.16 });
+        push({ len: 20, feat: 'dropP', dropH: dh, dropAt: 8, grade: 0.12, name: dh > 2.2 ? 'MEGA drop' : dh > 1.3 ? 'Big drop' : 'Drop' }); push({ len: 14 + r() * 6, grade: 0.14 }); break; }
       case 'jump': {      // a jump designed for a speed: kicker angle/height, flight, deck and landing all follow from it
-        const big = r() < 0.4, v = big ? 11 + r() * 2.5 : 8.5 + r() * 2.5, th = (big ? 22 : 18 + r() * 8) * D2R, Hk = big ? 1.4 + r() * 0.9 : 0.7 + r() * 0.7, g = 0.2 + r() * 0.04;
+        const big = extreme || r() < 0.4, mega = extreme && r() < 0.6, v = mega ? 13.5 + r() * 2 : big ? 11 + r() * 2.5 : 8.5 + r() * 2.5, th = (mega ? 25 : big ? 22 : 18 + r() * 8) * D2R, Hk = mega ? 2.3 + r() * 0.9 : big ? 1.4 + r() * 0.9 : 0.7 + r() * 0.7, g = 0.2 + r() * 0.04;
         const J = designJump(v, th, Hk, 0.12, r() < 0.5);
-        push({ len: runIn(v, g), grade: g }); push({ ...J, v, feat: 'kicker', grade: 0.12, name: big ? (J.table ? 'Huge tabletop' : 'Huge step-down') : (J.table ? 'Tabletop' : 'Step-down') });
+        push({ len: runIn(v, g), grade: g }); push({ ...J, v, feat: 'kicker', grade: 0.12, name: mega ? (J.table ? 'MEGA tabletop' : 'MEGA step-down') : big ? (J.table ? 'Huge tabletop' : 'Huge step-down') : (J.table ? 'Tabletop' : 'Step-down') });
         push({ len: 12 + r() * 8, grade: 0.13 }); break; }
     }
   }
@@ -172,18 +172,18 @@ function profile(seg, ls, d, noise) {
 }
 
 // a rideable track for a biome: generate, check, and retry with a new seed if any rule is broken
-export function generateTrack(biome, seed = (Math.random() * 1e9) | 0) {
+export function generateTrack(biome, seed = (Math.random() * 1e9) | 0, extreme = false) {
   for (let tries = 0; tries < 8; tries++) {
-    const t = buildTrack(seed + tries * 101, { biome });
+    const t = buildTrack(seed + tries * 101, { biome, extreme });
     if (t.check.ok) return t;
     console.warn('track rejected:', t.check.why);
   }
-  return buildTrack(seed, { biome });
+  return buildTrack(seed, { biome, extreme });
 }
 
 export function buildTrack(seed = 7, opts = {}) {
   const t0 = Date.now(), biome = opts.biome || 'test', B = BIOMES[biome], ds = 0.25;
-  const layout = opts.layout || (biome === 'test' ? LAYOUT : generateLayout(seed, biome));
+  const layout = opts.layout || (biome === 'test' ? LAYOUT : generateLayout(seed, biome, opts.extreme));
   const noise = makeNoise(seed), n2 = makeNoise(seed + 11), n3 = makeNoise(seed + 29);
   const S = [], X = [], Z = [], PSI = [], SEG = [], GR = [], segs = [];
   let x = 0, z = 0, psi = 0, s = 0;

@@ -5,7 +5,7 @@ import { V } from '../src/core/math.js';
 import { maxLatAccel } from '../src/physics/bike.js';
 const seed = +process.argv[2] || 4242;
 for (const b of ['forest', 'snow', 'desert']) {
-  const t = generateTrack(b, seed), S = new RideSystem(t), bk = S.bike; S.reset(5, 0);
+  const t = generateTrack(b, seed, !!process.env.EXTREME), S = new RideSystem(t), bk = S.bike; S.reset(5, 0);
   const { S: SS, X, Z } = t.centerline; let si = 0, ps = 0, crashes = 0, minClear = 0, tEnd = null, maxAir = 0, maxF = 0, maxR = 0;
   const nS = () => { let bb = 1e9, bs = si; for (let i = Math.max(0, si - 200); i < Math.min(SS.length, si + 400); i += 2) { const d = (X[i] - bk.p.x) ** 2 + (Z[i] - bk.p.z) ** 2; if (d < bb) { bb = d; bs = i; } } si = bs; return SS[bs]; };
   for (let i = 0; i < 400000; i++) {

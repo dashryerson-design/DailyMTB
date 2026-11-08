@@ -66,6 +66,14 @@ kbd { font: 500 11px var(--mono); background: rgba(255,255,255,0.14); border-rad
 #progress { top: calc(12px + env(safe-area-inset-top, 0px)); left: 50%; transform: translateX(-50%); width: min(420px, 60vw); display: grid; gap: 6px; text-align: center; }
 #progress .clock { font: 600 26px/1 var(--mono); } #progress .bar i { background: var(--orange); }
 #toast { position: fixed; top: 22%; left: 50%; transform: translateX(-50%); font: 800 italic 44px/1 var(--display); letter-spacing: 0.06em; color: #e3b448; text-shadow: 0 4px 18px rgba(0,0,0,0.6); pointer-events: none; }
+#replayBar { position: fixed; z-index: 22; left: 0; right: 0; bottom: 0; display: flex; align-items: center; gap: 18px; padding: 14px max(16px, env(safe-area-inset-right, 0px)) calc(14px + env(safe-area-inset-bottom, 0px)) max(16px, env(safe-area-inset-left, 0px)); background: linear-gradient(transparent, rgba(0,0,0,0.65)); }
+#replayBar b { font: 900 italic 30px/1 var(--display); letter-spacing: 0.1em; color: var(--orange); }
+#replayBar span { font: 600 13px var(--mono); letter-spacing: 0.16em; color: var(--dim); flex: 1; }
+.cinema::before, .cinema::after { content: ""; position: fixed; left: 0; right: 0; height: 9vh; background: #000; z-index: 21; pointer-events: none; } .cinema::before { top: 0; } .cinema::after { bottom: 0; }
+.exrow { margin-top: -14px; }
+.exbtn { font: 800 italic 17px/1 var(--display); letter-spacing: 0.08em; color: var(--cream); background: rgba(255,255,255,0.06); border: 2px solid rgba(255,106,26,0.45); border-radius: 6px; padding: 11px 8px; cursor: pointer; transition: .15s; }
+.exbtn:hover { background: rgba(255,106,26,0.18); }
+.exbtn.on { background: var(--orange); color: #160a02; border-color: var(--orange); box-shadow: 0 6px 22px rgba(255,106,26,0.45); }
 #menuBtn { top: calc(12px + env(safe-area-inset-top, 0px)); right: max(12px, env(safe-area-inset-right, 0px)); cursor: pointer; color: var(--ink); border: 0; font: 600 12px var(--mono); letter-spacing: 0.1em; }
 @media (max-width: 760px) { .cards { grid-template-columns: 1fr; width: min(320px, 100%); } .card { aspect-ratio: 16 / 9; } }
 @media (max-width: 700px) { #help, #telemetry { display: none; } #stats { width: auto; right: 12px; } }
@@ -110,13 +118,17 @@ kbd { font: 500 11px var(--mono); background: rgba(255,255,255,0.14); border-rad
     <button class="card" data-biome="desert"><svg viewBox="0 0 300 400" preserveAspectRatio="xMidYMid slice"><defs><linearGradient id="d1" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#f2b46b"/><stop offset="1" stop-color="#f7dcae"/></linearGradient></defs><rect width="300" height="400" fill="url(#d1)"/><circle cx="220" cy="90" r="34" fill="#fff1c9"/><path d="M-10 220 L40 220 L50 160 L120 160 L130 220 L200 220 L215 180 L260 180 L270 230 L310 230 L310 400 L-10 400Z" fill="#c4743f"/><path d="M-10 290 C 80 250, 160 300, 310 260 L310 400 L-10 400Z" fill="#e0a565"/><g fill="#4f6b3a"><rect x="58" y="270" width="10" height="46" rx="5"/><rect x="48" y="282" width="8" height="18" rx="4"/><rect x="70" y="276" width="8" height="20" rx="4"/><rect x="236" y="250" width="8" height="34" rx="4"/></g><path d="M100 400 C 130 350, 210 340, 180 290" stroke="#b07a4c" stroke-width="10" fill="none"/></svg><span class="tick">✓</span><span class="lbl"><b>DESERT</b><span>Sandstone ridges, drops, fast dusty lines</span></span></button>
     <button class="card" data-biome="forest"><svg viewBox="0 0 300 400" preserveAspectRatio="xMidYMid slice"><defs><linearGradient id="f1" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#8fb6c9"/><stop offset="1" stop-color="#c7dbc4"/></linearGradient></defs><rect width="300" height="400" fill="url(#f1)"/><path d="M-10 230 L80 150 L150 200 L230 130 L310 190 L310 400 L-10 400Z" fill="#3f6247"/><g fill="#1f3b2a"><path d="M20 320 l22 -90 l22 90z"/><path d="M60 330 l18 -70 l18 70z"/><path d="M200 320 l24 -96 l24 96z"/><path d="M246 330 l18 -74 l18 74z"/><path d="M150 300 l14 -52 l14 52z"/></g><path d="M-10 330 C 80 300, 200 340, 310 310 L310 400 L-10 400Z" fill="#2c4a30"/><path d="M110 400 C 140 350, 200 350, 170 300" stroke="#6b4a2c" stroke-width="10" fill="none"/></svg><span class="tick">✓</span><span class="lbl"><b>FOREST</b><span>Roots, berms, rock gardens, tight woods</span></span></button>
   </div>
+  <div class="cards exrow">
+    <button class="exbtn" data-biome="snow">⚡ EXTREME SNOW</button><button class="exbtn" data-biome="desert">⚡ EXTREME DESERT</button><button class="exbtn" data-biome="forest">⚡ EXTREME FOREST</button>
+  </div>
   <div class="row2"><button class="btn ghost" id="backBtn">BACK</button><button class="btn" id="genBtn" disabled>GENERATE TRACK</button></div>
 </div>
 <div id="finish" class="screen" hidden>
   <h2>Finish<small id="finishInfo"></small></h2>
   <div class="time" id="finishTime">0:00.0</div>
-  <div class="row2"><button class="btn ghost" id="menuBtn2">MENU</button><button class="btn ghost" id="newBtn">NEW TRACK</button><button class="btn" id="againBtn">RIDE AGAIN</button></div>
+  <div class="row2"><button class="btn ghost" id="menuBtn2">MENU</button><button class="btn ghost" id="replayBtn">▶ WATCH REPLAY</button><button class="btn ghost" id="newBtn">NEW TRACK</button><button class="btn" id="againBtn">RIDE AGAIN</button></div>
 </div>
+<div id="replayBar" hidden><b>REPLAY</b><span id="replayShot"></span><button class="btn ghost" id="replayExit">EXIT <kbd>Esc</kbd></button></div>
 <div id="loading" hidden><div class="spin"></div><div id="loadText">GENERATING TRAIL…</div></div>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
 <script type="module" src="src/main.js"></script>
