@@ -306,6 +306,13 @@ export class Bike {
     if (pedalling) { const dA = this.wR * ratio * dt; this.crank += dA; this.chainPos += dA * G.cogR(G.RING_T); this.cassette += this.wR * dt; }
     this.wheelAngF = (this.wheelAngF || 0) + this.wF * dt; this.wheelAngR = (this.wheelAngR || 0) + this.wR * dt;
 
+    // pop: leaning back (↓) on the run-up to a lip loads the rear and springs the rider off it. Taking off
+    // with recent back-lean adds lift + a bit of carry (scales with how much and how recently you leaned back)
+    if (grounded) this.popL = (this.popL || 0) + (Math.max(0, this.inp.pitch) - (this.popL || 0)) * Math.min(1, dt / (this.inp.pitch > 0 ? 0.12 : 0.35));
+    else if (this.air === 0 && this.mounted && (this.popL || 0) > 0.05 && this.v.y > 0.6 && this.speed > 3) {
+      const k = this.popL, h = Math.hypot(this.v.x, this.v.z), dv = new V(this.v.x / h * 0.7 * k, 1.6 * k, this.v.z / h * 0.7 * k);
+      this.v = this.v.add(dv); this.vr = this.vr.add(dv); this.popL = 0; this.popped = k;
+    }
     if (grounded && this.air > 0) this.lastAir = this.air;
     this.air = grounded ? 0 : this.air + dt;
     this.rim = (cF && cF.rim) || (cR && cR.rim) ? 0.3 : Math.max(0, this.rim - dt);
