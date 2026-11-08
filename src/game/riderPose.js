@@ -41,7 +41,7 @@ export class RiderPose {
     // ---- pelvis: seated/standing base + the physics torso offset (bumps, landings, weight shift)
     const tOff = b.torsoOff || new V();
     let hx = -0.23 + 0.07 * s.stand - 0.13 * s.brake + 0.04 * s.accel + clamp(tOff.x, -0.2, 0.2);
-    let hy = 0.785 + 0.095 * s.stand + 0.05 * s.air - 0.17 * s.land + clamp(tOff.y, -0.2, 0.06) - 0.012 * pa * sw2;
+    let hy = 0.785 + 0.095 * s.stand + 0.05 * s.air - 0.17 * s.land + clamp(tOff.y, -0.2, 0.06) - 0.005 * pa * sw2;
     const hz = clamp(tOff.z, -0.05, 0.05) - 0.05 * s.corner + 0.09 * s.side + 0.07 * whip + 0.05 * pa * sw;   // hips throw out in the air; drive over each pedal stroke
     // never further than the legs can reach to either pedal
     const reach = (SEG.thigh + SEG.shin) * 0.97;
@@ -51,7 +51,7 @@ export class RiderPose {
     // ---- torso: forward lean angle from the posture, a little extra inward lean in corners
     const fwdLean = 0.62 + 0.25 * s.stand + 0.12 * s.accel - 0.2 * s.brake + 0.3 * s.land - 0.1 * s.air;
     // lower torso goes with the hips (and the whip); the chest/shoulders stay level with the world in the air
-    const tilt = -0.25 * s.corner + 0.3 * s.side - 0.4 * whip - 0.45 * (b.lean || 0) * s.air + 0.13 * pa * sw;
+    const tilt = -0.25 * s.corner + 0.3 * s.side - 0.4 * whip - 0.45 * (b.lean || 0) * s.air + 0.03 * pa * sw;
     const tiltU = (-0.25 * s.corner + 0.3 * s.side) * (1 - s.air) - (b.lean || 0) * s.air - 0.09 * pa * sw;   // shoulders counter the hips
     const dir = (a, len, t) => new V(Math.sin(a) * len, Math.cos(a) * len * Math.cos(t), Math.cos(a) * len * Math.sin(t));
     const spine = H.add(dir(fwdLean * 0.55, SEG.lumbar, tilt));
