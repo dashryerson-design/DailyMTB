@@ -77,16 +77,16 @@ export class Assist {
         const pr = w.dot(ctx.right);
         const tp = -A.landingAlign * urg * (1 - Math.min(1, Math.abs(b.inp.pitch))) *   // player's own pitch input takes priority
            (650 * pe + 110 * pr * (Math.abs(pe) > 0 ? 1 : 0.3));
-        const re = deadband(lean - L.bank - 0.55 * b.inp.lean, 0.07);   // ←/→ holds a mid-air tilt; released = back to level
+        const re = deadband(lean - L.bank - 1.05 * b.inp.lean, 0.07);   // whip = bike laid over, tail kicked out to the side   // ←/→ holds a mid-air tilt; released = back to level
         // roll in the air is always damped firmly (a sideways launch must not keep spinning), and anything past
         // ~50° gets pulled back hard - that is a rider fighting to save it, not a style move
-        const over = Math.max(0, Math.abs(lean) - 0.85) * Math.sign(lean);
+        const over = Math.max(0, Math.abs(lean) - 0.85 - 0.4 * Math.abs(b.inp.lean)) * Math.sign(lean);
         const tr = -A.landingRoll * Math.max(urg, 0.7 * Math.abs(b.inp.lean)) * (650 * re) - A.landingRoll * (320 * leanRate + 1500 * over);
         // ←/→ whip: the bike also yaws out of line with the direction of travel (pure torques - the flight
         // path stays the one set at take-off); released, it swings back in line for the landing
         const vb = b.q.inv(b.v), rel = -Math.atan2(vb.z, vb.x);                // + = nose pointing right of travel
-        const yerr = rel - 1.35 * b.inp.lean, ky = Math.max(urg, 1.3 * Math.abs(b.inp.lean));   // big whip: tail thrown ~75° out
-        const ty = ky * (420 * yerr - 80 * w.y);
+        const yerr = rel - 0.3 * b.inp.lean, ky = Math.max(urg, 0.8 * Math.abs(b.inp.lean));   // whip: bars stay mostly pointed ahead, only a little yaw
+        const ty = ky * (320 * yerr - 70 * w.y);
         b.airYaw = rel;
         T = T.add(ctx.right.mul(tp)).add(fh.mul(tr)).add(new V(0, ty, 0));
         info.landP = tp; info.landR = tr;
