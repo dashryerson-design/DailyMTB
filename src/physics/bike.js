@@ -173,7 +173,7 @@ export class Bike {
       cog = G.COGS[this.gear]; cad = wheelW * cog / G.RING_T;
     }
     const ratio = cog / G.RING_T;
-    const Tdrive = ip.thr * Math.min(90 / ratio, 700 / Math.max(wheelW, 1.5)) * clamp((14 - cad) / 3, 0, 1);
+    const Tdrive = ip.thr * Math.min(135 / ratio, 1150 / Math.max(wheelW, 1.5)) * clamp((16 - cad) / 3, 0, 1);
     // chain tension on the swingarm (anti-squat), ring and cog tops in BB frame
     const rc = G.cogR(cog), Fc = Tdrive / rc;
     const cogTop = [ra.ax, ra.ay + rc], ringTop = [0, G.cogR(G.RING_T)], cd = [ringTop[0] - cogTop[0], ringTop[1] - cogTop[1]], cdl = Math.hypot(cd[0], cd[1]);
