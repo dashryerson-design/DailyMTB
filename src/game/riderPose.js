@@ -28,6 +28,10 @@ export class RiderPose {
     s.accel = ease(s.accel, ip.thr, 4, dt);
     s.corner = ease(s.corner, clamp(b.lean || 0, -0.8, 0.8), 8, dt);
     s.side = ease(s.side ?? 0, ip.lean || 0, 7, dt);
+    // pedalling rhythm (driven by the actual crank angle): hips rock and drive side to side with each
+    // stroke, the trunk counter-sways and twists, the head stays quiet. Bigger out of the saddle.
+    s.pedal = ease(s.pedal ?? 0, (ip.thr > 0.05 && !air) ? Math.min(1, ip.thr) : 0, 5, dt);
+    const pa = s.pedal * (0.75 + 0.6 * s.stand), ph = b.crank || 0, sw = Math.sin(ph), sw2 = Math.cos(2 * ph);
     const whip = s.side * s.air;                                       // mid-air style move (0 on the ground)
     s.yawRel = ease(s.yawRel ?? 0, air ? (b.airYaw || 0) : 0, 10, dt);
     s.air = ease(s.air, air ? 1 : 0, 6, dt);
@@ -37,8 +41,8 @@ export class RiderPose {
     // ---- pelvis: seated/standing base + the physics torso offset (bumps, landings, weight shift)
     const tOff = b.torsoOff || new V();
     let hx = -0.23 + 0.07 * s.stand - 0.13 * s.brake + 0.04 * s.accel + clamp(tOff.x, -0.2, 0.2);
-    let hy = 0.785 + 0.095 * s.stand + 0.05 * s.air - 0.13 * s.land + clamp(tOff.y, -0.12, 0.06);
-    const hz = clamp(tOff.z, -0.05, 0.05) - 0.05 * s.corner + 0.09 * s.side + 0.2 * whip;   // hips throw out to the side in the air
+    let hy = 0.785 + 0.095 * s.stand + 0.05 * s.air - 0.13 * s.land + clamp(tOff.y, -0.12, 0.06) - 0.012 * pa * sw2;
+    const hz = clamp(tOff.z, -0.05, 0.05) - 0.05 * s.corner + 0.09 * s.side + 0.2 * whip + 0.05 * pa * sw;   // hips throw out in the air; drive over each pedal stroke
     // never further than the legs can reach to either pedal
     const reach = (SEG.thigh + SEG.shin) * 0.97;
     for (const sd of [-1, 1]) { const pd = G.pedalAt(b.crank, sd), ax = pd[0] - 0.04, ay = pd[1] + 0.075;
@@ -47,8 +51,8 @@ export class RiderPose {
     // ---- torso: forward lean angle from the posture, a little extra inward lean in corners
     const fwdLean = 0.62 + 0.25 * s.stand + 0.12 * s.accel - 0.2 * s.brake + 0.15 * s.land - 0.1 * s.air;
     // lower torso goes with the hips (and the whip); the chest/shoulders stay level with the world in the air
-    const tilt = -0.25 * s.corner + 0.3 * s.side - 0.75 * whip - 0.45 * (b.lean || 0) * s.air;
-    const tiltU = (-0.25 * s.corner + 0.3 * s.side) * (1 - s.air) - (b.lean || 0) * s.air;
+    const tilt = -0.25 * s.corner + 0.3 * s.side - 0.75 * whip - 0.45 * (b.lean || 0) * s.air + 0.13 * pa * sw;
+    const tiltU = (-0.25 * s.corner + 0.3 * s.side) * (1 - s.air) - (b.lean || 0) * s.air - 0.09 * pa * sw;   // shoulders counter the hips
     const dir = (a, len, t) => new V(Math.sin(a) * len, Math.cos(a) * len * Math.cos(t), Math.cos(a) * len * Math.sin(t));
     const spine = H.add(dir(fwdLean * 0.55, SEG.lumbar, tilt));
     let neck = spine.add(dir(fwdLean, SEG.thorax, tiltU));
@@ -61,12 +65,12 @@ export class RiderPose {
     // head stays steadier than the body: blend its "up" toward world up, look ahead
     const wUp = b.q.inv(new V(0, 1, 0)), headUp = new V(0.35, 1, 0).norm().mul(0.5).add(wUp.mul(0.5)).norm();
     // airborne: upper body counter-rotates to keep facing the direction of travel while the bike whips
-    const twist = -(s.yawRel || 0),   // shoulders keep facing the direction of travel
+    const twist = -(s.yawRel || 0) - 0.1 * pa * sw,   // shoulders keep facing the direction of travel
        rotY = (p) => { const d = p.sub(spine), c = Math.cos(twist), sn = Math.sin(twist); return spine.add(new V(d.x * c + d.z * sn, d.y, -d.x * sn + d.z * c)); };
     neck = rotY(neck);
     const head = neck.add(headUp.mul(SEG.neck)).add(new V(0.06, 0, 0));
     const P = new Array(17);
-    const tw = 0.35 * s.side + 0.6 * whip;   // hips turn toward the lean, hard in the air
+    const tw = 0.35 * s.side + 0.6 * whip + 0.16 * pa * sw;   // hips turn toward the lean, hard in the air
     P[J.hipL] = H.add(new V(SEG.hipW * Math.sin(tw), 0, -SEG.hipW * Math.cos(tw))); P[J.hipR] = H.add(new V(-SEG.hipW * Math.sin(tw), 0, SEG.hipW * Math.cos(tw)));
     P[J.spine] = spine; P[J.neck] = neck; P[J.head] = head;
     P[J.shL] = rotY(neck.add(new V(0, -0.03, -SEG.shW)).sub(neck).add(spine)).sub(spine).add(neck); P[J.shR] = rotY(neck.add(new V(0, -0.03, SEG.shW)).sub(neck).add(spine)).sub(spine).add(neck);
