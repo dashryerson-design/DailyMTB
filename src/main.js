@@ -146,7 +146,7 @@ function frame(now) {
     }
     const bx = sys.body(dt, view);
     model.update(view); riderModel.update({ x: bx }, view);
-    dust.update(paused ? 0 : dt, mode === 'ride' && !paused ? bike : null, track.h);
+    dust.update(paused ? 0 : dt, mode === "ride" && !paused ? bike : null, track.h, cam);
     while (L.started && !L.done && mode === 'ride' && L.rec.length <= L.runT * 30) {
       L.rec.push({ p: view.p, q: view.q, th: bike.th, sF: bike.sF, steer: bike.steer, wheelAngF: bike.wheelAngF, wheelAngR: bike.wheelAngR, crank: bike.crank, cassette: bike.cassette, chainPos: bike.chainPos, gear: bike.gear, x: bx.map(v => new V(v.x, v.y, v.z)), air: bike.air > 0.15 && bike.mounted, v: bike.v }); }
     const gr = L.best && mode === 'ride' && L.started ? L.best.rec : null; showGhost(!!gr && L.runT * 30 < gr.length - 1);
