@@ -139,9 +139,14 @@ function frame(now) {
     const { bike, rider, track, sys } = L;
     // bike + rider drawn leaning relative to the riding surface on banked turns
     L.visLean += ((bike.mounted && !bike.crashed ? clamp(bike.visBank || 0, -0.6, 0.6) : 0) - L.visLean) * Math.min(1, dt * 3);
+    // pedalling sway: the bike rocks a few degrees under each pedal stroke (opposite the hips). Visual only, so it
+    // never steers; only when pedalling in a straight line (fades out as soon as a turn or lean is asked for)
+    const ip = bike.inp, straight = bike.mounted && !bike.crashed && bike.cF && bike.cR ? clamp(1 - Math.abs(ip.steer) / 0.15, 0, 1) * clamp(1 - Math.abs(ip.lean) / 0.15, 0, 1) * clamp(1 - Math.abs(bike.lean || 0) / 0.08, 0, 1) : 0;
+    L.pedS = (L.pedS || 0) + ((ip.thr > 0.05 ? Math.min(1, ip.thr) * straight : 0) - (L.pedS || 0)) * Math.min(1, dt * 4);
+    const rock = -0.06 * L.pedS * Math.sin(bike.crank || 0);
     let view = bike;
-    if (Math.abs(L.visLean) > 1e-3) {
-      const f = bike.q.rot(new V(1, 0, 0)), fh = new V(f.x, 0, f.z).norm(), rq = Q.axis(fh, L.visLean), gp = new V(bike.p.x, track.h(bike.p.x, bike.p.z), bike.p.z);
+    if (Math.abs(L.visLean + rock) > 1e-3) {
+      const f = bike.q.rot(new V(1, 0, 0)), fh = new V(f.x, 0, f.z).norm(), rq = Q.axis(fh, L.visLean + rock), gp = new V(bike.p.x, track.h(bike.p.x, bike.p.z), bike.p.z);
       view = Object.create(bike); view.q = rq.mul(bike.q); view.p = gp.add(rq.rot(bike.p.sub(gp)));
     }
     const bx = sys.body(dt, view);
