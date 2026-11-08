@@ -126,6 +126,7 @@ function frame(now) {
       const s = trailS();
       if (!L.started && s > 8 && bike.speed > 0.5) L.started = true;
       if (L.cp < 5 && s > L.cps[L.cp] && bike.mounted) { L.cp++; toast(`CHECKPOINT ${L.cp} / 5`); }
+      if (bike.cleanLand && bike.cleanLand !== L.lastClean) { L.lastClean = bike.cleanLand; toast('CLEAN LANDING · SPEED BOOST'); }
       if (toastT > 0 && (toastT -= dt) <= 0) $('toast').hidden = true;
       if (L.started && !L.done && !bike.crashed) L.runT += dt;
       if (!L.done && s > track.total - 8 && bike.mounted) { L.done = true; const prev = L.best, pb = !prev || L.runT < prev.t; if (pb) L.best = { t: L.runT, rec: L.rec };

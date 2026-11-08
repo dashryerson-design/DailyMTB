@@ -313,6 +313,13 @@ export class Bike {
       const k = this.popL, h = Math.hypot(this.v.x, this.v.z), dv = new V(this.v.x / h * 0.7 * k, 1.6 * k, this.v.z / h * 0.7 * k);
       this.v = this.v.add(dv); this.vr = this.vr.add(dv); this.popL = 0; this.popped = k;
     }
+    // clean landing: touching down on both wheels with the bike square to the ground (pitch and roll within ~9°)
+    // carries the speed into the landing: a small push along the direction of travel, bigger after longer air
+    if (grounded && this.air > 0.35) { this.landWin = 0.12; this.landAir = this.air; }   // both wheels must be down within 0.12 s of touchdown
+    if (grounded && this.landWin > 0 && (this.landWin -= dt) > 0 && this.mounted && cF && cR) {
+      const n = this.track.normal(this.p.x, this.p.z), sq = up.dot(new V(n.x, n.y, n.z)); this.landWin = 0;
+      if (sq > 0.988) { const sp = this.v.len(), k = Math.min(1.2, 0.4 + 0.6 * this.landAir); if (sp > 1) { const dv = this.v.mul(k / sp); this.v = this.v.add(dv); this.vr = this.vr.add(dv); } this.cleanLand = this.time; }
+    }
     if (grounded && this.air > 0) this.lastAir = this.air;
     this.air = grounded ? 0 : this.air + dt;
     this.rim = (cF && cF.rim) || (cR && cR.rim) ? 0.3 : Math.max(0, this.rim - dt);
