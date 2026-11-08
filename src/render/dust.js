@@ -1,7 +1,7 @@
 // Dirt / snow / sand roost kicked up by the tyres: a pooled THREE.Points cloud. Emission scales with speed,
 // tyre slip and braking, per surface (snow and sand throw a lot, rock almost nothing).
 const T = window.THREE;
-const LOOK = { Dirt: [0x8a6a48, 1], Gravel: [0x9a9286, 0.6], Rock: [0xa8a49c, 0.15], Grass: [0x6f6a42, 0.35], Root: [0x6e5238, 0.7], Snow: [0xf4f7fb, 1.6], Ice: [0xdfeaf4, 0.5], Sand: [0xd8bd88, 1.7] };
+const LOOK = { Dirt: [0x8a6a48, 1], Gravel: [0x9a9286, 0.6], Rock: [0xa8a49c, 0.15], Grass: [0x6f6a42, 0.35], Root: [0x6e5238, 0.7], 'Packed snow': [0xf4f7fb, 1.6], Ice: [0xdfeaf4, 0.5], Sand: [0xd8bd88, 1.7] };
 const N = 1600;
 export class Dust {
   constructor(scene) {
