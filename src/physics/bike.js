@@ -228,6 +228,9 @@ export class Bike {
       const rA = q.rot(ANCHOR.add(new V(-ip.pitch * TORSO.shift - 0.08 * ip.bF - 0.05 * ip.bR, 0, 0))), aW = this.p.add(rA), vA = this.v.add(this.w.cross(rA));
       const dl = q.inv(this.pr.sub(aW)), vl = q.inv(this.vr.sub(vA)), K = TORSO.k, Cd = TORSO.c;
       const fl = new V(-K.x * dl.x - Cd.x * vl.x, -K.y * dl.y - Cd.y * vl.y + (grounded ? TORSO.m * GRAV * Math.max(0.3, up.y) : 0), -K.z * dl.z - Cd.z * vl.z);
+      // the rider's legs stomp each pedal stroke (2 pulses per crank turn): pushes the bike down, the body up,
+      // so the suspension bobs with the pedalling like a real bike (internal pair, no net force)
+      if (grounded && ip.thr > 0.05) fl.y += 380 * ip.thr * Math.max(0, Math.cos(2 * (this.crank || 0)));
       const fr = q.rot(fl);
       this.vr = this.vr.add(fr.mul(dt / TORSO.m)).add(g.mul(dt)); this.pr = this.pr.add(this.vr.mul(dt));
       F = F.sub(fr); T = T.add(rA.cross(fr.mul(-1))); this.torsoOff = dl;
