@@ -31,7 +31,7 @@ export function setStyle(st) { Q.style = st === 'lowpoly' ? 'lowpoly' : 'real'; 
 // ---- cartoon ("low poly") look helpers
 let _grad = null;
 export function toonGradient() {   // 3-band cel shading ramp
-  if (_grad) return _grad; const T = window.THREE, d = new Uint8Array([90, 170, 255]);
+  if (_grad) return _grad; const T = window.THREE, d = new Uint8Array([70, 160, 255]);
   _grad = new T.DataTexture(d, 3, 1, T.LuminanceFormat); _grad.minFilter = _grad.magFilter = T.NearestFilter; _grad.generateMipmaps = false; _grad.needsUpdate = true; return _grad;
 }
 export function toonMat(o = {}) { const T = window.THREE; return new T.MeshToonMaterial({ gradientMap: toonGradient(), ...o }); }
@@ -68,7 +68,7 @@ export function styleModel(root) {
         o.material = u.toon;
         // ink outline: back faces pushed out along the normals (skip tiny parts and ghosts)
         if (!o.geometry.boundingSphere) o.geometry.computeBoundingSphere();
-        if (!u.ol && !o.isInstancedMesh && !ghost(r) && o.geometry.boundingSphere.radius > 0.03) {
+        if (!u.ol && !o.isInstancedMesh && !ghost(r) && o.geometry.boundingSphere.radius > 0.02) {
           const ol = new T.Mesh(o.geometry, outlineMat()); ol.userData.outline = true; ol.castShadow = false; ol.raycast = () => {}; o.add(ol); u.ol = ol;
         }
         if (u.ol) u.ol.visible = true;
@@ -79,8 +79,8 @@ export function styleModel(root) {
 let _ol = null;
 function outlineMat() {
   if (_ol) return _ol; const T = window.THREE;
-  _ol = new T.MeshBasicMaterial({ color: 0x14161a, side: T.BackSide });
-  _ol.onBeforeCompile = (sh) => { sh.vertexShader = sh.vertexShader.replace('#include <begin_vertex>', 'vec3 transformed = position + normalize(normal) * 0.007;'); };
+  _ol = new T.MeshBasicMaterial({ color: 0x0a0b0d, side: T.BackSide });
+  _ol.onBeforeCompile = (sh) => { sh.vertexShader = sh.vertexShader.replace('#include <begin_vertex>', 'vec4 olp = modelViewMatrix * vec4(position, 1.0); float od = clamp(-olp.z / 2.2, 1.0, 6.0); vec3 transformed = position + normalize(normal) * 0.013 * od;'); };
   return _ol;
 }
 // Build models in low-poly form: while fn runs, the curved three.js primitives are created with very few
