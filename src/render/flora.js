@@ -83,6 +83,19 @@ export function pineFarGeo(snowy, tiers = 4, segs = 8) {   // tiers/segs up = th
   }
   return merge(parts);
 }
+// fully snow-laden fir: its own model - stacked, drooping white tiers (no green showing), cool blue-grey
+// shading under each tier, a short dark trunk stub. Used for snow in low poly and on Low graphics.
+export function snowTreeGeo(tiers = 5, segs = 8) {
+  const parts = [];
+  for (let k = 0; k < tiers; k++) {
+    const u = k / (tiers - 1), rad = 2.3 * (1 - u * 0.78) + 0.25, h = 1.9 - 0.6 * u, y0 = 1.0 + u * 5.2;
+    const c = new T.ConeGeometry(rad, h, segs, 1, false); c.translate(0, y0 + h / 2, 0);
+    displace(c, (x, y, z) => { const a = Math.atan2(z, x), r = Math.hypot(x, z) / rad, f = 1 + 0.14 * Math.sin(a * 4 + k * 1.3); return [x * f, y - 0.32 * r * r, z * f]; });   // heavy, sagging tiers
+    parts.push(paint(c, (x, y, z, nx, ny) => ny < -0.2 ? [0.62, 0.68, 0.78] : mix([0.86, 0.9, 0.96], [0.98, 0.99, 1], Math.max(0, ny))));
+  }
+  const tr = new T.CylinderGeometry(0.1, 0.16, 1.2, 6); tr.translate(0, 0.6, 0); parts.push(paint(tr, () => [0.32, 0.22, 0.15]));
+  return merge(parts);
+}
 // merge keeping uvs (for textured cards)
 function mergeUV(parts) {
   const g = merge(parts); let n = 0; parts.forEach((p) => n += p.attributes.position.count);

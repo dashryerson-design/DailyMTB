@@ -1,7 +1,7 @@
 // Terrain meshes (chunked, high-res near the trail), rocks, roots, vegetation, lighting, sky.
 import { SURF, rng, makeNoise } from '../terrain/track.js';
 import { Q, applySun, toonMat, facetize } from './quality.js';
-import { pineGeo, pineFarGeo, pineMaterial, trunkGeo, cactusGeo, bushGeo, grassGeo, grassMaterial } from './flora.js';
+import { pineGeo, pineFarGeo, snowTreeGeo, pineMaterial, trunkGeo, cactusGeo, bushGeo, grassGeo, grassMaterial } from './flora.js';
 const T = window.THREE;
 
 function detailTexture() {
@@ -140,7 +140,8 @@ export function buildWorld(scene0, track) {
   // trees + bushes (instanced)
   const cactus = P.treeKind === 'cactus';
   const trunkG = cactus ? new T.CylinderGeometry(0.001, 0.001, 0.001, 3) : LP ? new T.CylinderGeometry(0.07, 0.17, 1, 5).translate(0, 0.5, 0) : trunkGeo(false);
-  const folG = LP ? facetize(cactus ? cactusGeo(true) : pineFarGeo(P.treeKind === 'snowpine', 4, 7), { sat: 1.45, gain: 1.35, steps: 6 }) : cactus ? cactusGeo() : pineGeo(P.treeKind === 'snowpine');
+  const snowy = P.treeKind === 'snowpine', snowLow = snowy && (LP || Q.level === 'low');   // all-white snow firs (own model)
+  const folG = LP ? facetize(cactus ? cactusGeo(true) : snowy ? snowTreeGeo(5, 7) : pineFarGeo(false, 4, 7), { sat: snowy ? 1 : 1.45, gain: snowy ? 1.02 : 1.35, steps: snowy ? 10 : 6 }) : cactus ? cactusGeo() : pineGeo(P.treeKind === 'snowpine');
   const trees = [], dens = { pine: 1, snowpine: 0.7, cactus: 0.25 }[P.treeKind] ?? 1;
   // line the trail: a dense wall of trees just off the riding line, so the run feels like a corridor
   for (let sv = 0; sv < track.total; sv += 2.2) for (const sd of [-1, 1]) {
@@ -156,9 +157,9 @@ export function buildWorld(scene0, track) {
   const TREE_NEAR = 75, treeCh = new Chunks(root, [
     { geo: folG, mat: folMat, depth: folMat.depth, near: 0, far: TREE_NEAR, k: 'tree', shadow: 32, receive: true },
     { geo: trunkG, mat: LP ? toonMat({ color: new T.Color(0x6b4428).convertSRGBToLinear() }) : new T.MeshStandardMaterial({ vertexColors: true, roughness: 0.95, map: tex, bumpMap: tex, bumpScale: 0.02 }), near: 0, far: TREE_NEAR, k: 'tree', shadow: 32 },
-    { geo: cactus ? folG : pineFarGeo(P.treeKind === 'snowpine'), mat: cactus ? folMat : farMat, near: TREE_NEAR, far: 600, k: 'tree' },
+    { geo: cactus ? folG : snowLow && !LP ? snowTreeGeo(4, 6) : pineFarGeo(P.treeKind === 'snowpine'), mat: cactus ? folMat : farMat, near: TREE_NEAR, far: 600, k: 'tree' },
     // back rows (behind the trees lining the trail): mid-detail, no shadows, simple trunk
-    { geo: cactus ? folG : LP ? folG : pineFarGeo(P.treeKind === 'snowpine', 6, 10), mat: cactus ? folMat : farMat, near: 0, far: LP ? 2000 : TREE_NEAR, k: LP ? 'all' : 'tree', shadow: cactus || LP ? 30 : 0, receive: true },
+    { geo: cactus ? folG : LP ? folG : snowLow ? snowTreeGeo(6, 9) : pineFarGeo(P.treeKind === 'snowpine', 6, 10), mat: cactus ? folMat : farMat, near: 0, far: LP ? 2000 : TREE_NEAR, k: LP ? 'all' : 'tree', shadow: cactus || LP ? 30 : 0, receive: true },
     { geo: cactus ? trunkG : new T.CylinderGeometry(0.06, 0.15, 1, 6).translate(0, 0.5, 0), mat: LP ? toonMat({ color: new T.Color(0x6b4428).convertSRGBToLinear() }) : new T.MeshStandardMaterial({ color: new T.Color(0x3a2a1e).convertSRGBToLinear(), roughness: 0.95 }), near: 0, far: LP ? 2000 : TREE_NEAR, k: LP ? 'all' : 'tree' },
   ], 32); chunks.push(treeCh);
   // Low graphics: thin the forest to ~45% (keeping more of the trees right by the trail)
@@ -166,7 +167,7 @@ export function buildWorld(scene0, track) {
   const treeId = trees.map(([x, z, s]) => { const y = track.h(x, z); q.setFromAxisAngle(new T.Vector3(0, 1, 0), r() * 6.28);
     const F = new T.Matrix4().compose(new T.Vector3(x, y, z), q, new T.Vector3(s, s, s)), Tr = cactus ? null : new T.Matrix4().compose(new T.Vector3(x, y, z), q, new T.Vector3(s, 7.2 * s, s));
     const front = cactus || (!LP && Q.level !== 'low' && track.trackDist(x, z) < 14);   // only the row lining the trail gets the full tree (none on Low)
-    return treeCh.add(x, y, z, front ? [F, Tr, F, null, null] : [null, null, LP ? null : F, F, cactus ? null : Tr], new T.Color(0.85 + r() * 0.25, 0.85 + r() * 0.25, 0.8 + r() * 0.2)); });
+    return treeCh.add(x, y, z, front ? [F, Tr, F, null, null] : [null, null, LP ? null : F, F, cactus || snowLow ? null : Tr], new T.Color(0.85 + r() * 0.25, 0.85 + r() * 0.25, 0.8 + r() * 0.2)); });
   treeCh.build();
   const bushG0 = bushGeo(track.biome === 'test' ? 'forest' : track.biome, LP), bushG = LP ? facetize(bushG0, { sat: 1.4, gain: 1.3, steps: 6 }) : bushG0, bushes = [];
   for (let sv = 0; sv < track.total; sv += 1.6) for (const sd of [-1, 1]) {      // low undergrowth along the trail edge
