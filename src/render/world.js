@@ -156,9 +156,11 @@ export function buildWorld(scene0, track) {
     { geo: cactus ? folG : pineFarGeo(P.treeKind === 'snowpine', 6, 10), mat: cactus ? folMat : farMat, near: 0, far: TREE_NEAR, k: 'tree', shadow: cactus ? 30 : 0, receive: true },
     { geo: cactus ? trunkG : new T.CylinderGeometry(0.06, 0.15, 1, 6).translate(0, 0.5, 0), mat: new T.MeshStandardMaterial({ color: new T.Color(0x3a2a1e).convertSRGBToLinear(), roughness: 0.95 }), near: 0, far: TREE_NEAR, k: 'tree' },
   ], 32); chunks.push(treeCh);
+  // Low graphics: thin the forest to ~45% (keeping more of the trees right by the trail)
+  if (Q.level === 'low' && !cactus) { const keep = trees.filter(([x, z]) => r() < (track.trackDist(x, z) < 10 ? 0.65 : 0.35)); trees.length = 0; trees.push(...keep); }
   const treeId = trees.map(([x, z, s]) => { const y = track.h(x, z); q.setFromAxisAngle(new T.Vector3(0, 1, 0), r() * 6.28);
     const F = new T.Matrix4().compose(new T.Vector3(x, y, z), q, new T.Vector3(s, s, s)), Tr = cactus ? null : new T.Matrix4().compose(new T.Vector3(x, y, z), q, new T.Vector3(s, 7.2 * s, s));
-    const front = cactus || track.trackDist(x, z) < 14;   // only the row lining the trail gets the full tree
+    const front = cactus || (Q.level !== 'low' && track.trackDist(x, z) < 14);   // only the row lining the trail gets the full tree (none on Low)
     return treeCh.add(x, y, z, front ? [F, Tr, F, null, null] : [null, null, F, F, cactus ? null : Tr], new T.Color(0.85 + r() * 0.25, 0.85 + r() * 0.25, 0.8 + r() * 0.2)); });
   treeCh.build();
   const bushG = bushGeo(track.biome === 'test' ? 'forest' : track.biome), bushes = [];
