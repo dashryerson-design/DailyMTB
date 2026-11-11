@@ -51,7 +51,7 @@ export class Dust {
       [[bike.cR, 1, 0], [bike.cF, 0.3, 2]].forEach(([c, w, ix]) => {
         if (!c || spd < 1.2) return;
         const look = LOOK[c.surf.name] || LOOK.Dirt, slip = Math.min(3, Math.abs(c.slip || 0) * 4 + Math.abs(c.Fy || 0) / 600), brk = (bike.inp.bR * (ix ? 0.3 : 1) + bike.inp.bF * (ix ? 1 : 0.3)) * spd;
-        const rate = w * (spd * 3 + slip * 45 + brk * 6);
+        const fast = Math.min(1, Math.max(0, (spd - 3) / 15)) ** 2, rate = w * (spd * 3 + slip * 45 + brk * 6) * (0.06 + 0.94 * fast);   // a light trace normally, full roost only at very high speed (~65 km/h)
         for (const kind of [0, 1]) {
           this.acc[ix + kind] += dt * rate * look[2 + kind] * (kind ? 0.8 : 1);
           let n = Math.min(25, Math.floor(this.acc[ix + kind])); this.acc[ix + kind] -= n;
