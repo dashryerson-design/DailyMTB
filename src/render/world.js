@@ -96,7 +96,7 @@ export function buildWorld(scene0, track) {
       const offC = offLike ? [base[0] * (0.82 + 0.3 * m + 0.08 * m2) + steep * 0.25, base[1] * (0.84 + 0.24 * m + 0.06 * m2) + steep * 0.1, base[2] * (0.9 + 0.15 * m) + steep * 0.05] : base;
       // the ridden line: a packed, worn tread with a ragged edge, two tyre ruts and a band of churned
       // material kicked to the sides - its own colour so it reads clearly against the ground around it
-      const jit = 0.28 * noise(x / 2.1 + 3, z / 2.1), mask = 1 - Math.min(1, Math.max(0, (td - (TW - 0.15 + jit)) / 0.3));
+      const jit = 0.28 * noise(x / 2.1 + 3, z / 2.1), mask = 1 - Math.min(1, Math.max(0, (td - (TW - 0.15 + jit * (LP ? 0.3 : 1))) / (LP ? 0.18 : 0.3)));   // cartoon: cleaner, crisper edge
       const tb = (s === SURF.DIRT || s === SURF.SNOW || offLike) ? (LP && track.biome === 'snow' ? [0.36, 0.47, 0.7] : P.trail) : base;   // cartoon snow: punchier blue packed trail
       const rut = 1 - (LP ? 0.07 : track.biome === 'snow' ? 0.24 : 0.16) * Math.exp(-(((td - 0.32) / 0.11) ** 2)) * (0.7 + 0.3 * m2), grain = LP ? 0.97 + 0.06 * m : 0.88 + 0.2 * m2 + 0.06 * m;   // cartoon: clean, even trail colour
       const trailC = tb.map((v) => v * rut * grain * (1 + 0.06 * Math.exp(-((td / 0.18) ** 2))));
@@ -109,7 +109,7 @@ export function buildWorld(scene0, track) {
     const g = new T.BufferGeometry();
     g.setAttribute('position', new T.BufferAttribute(pos, 3)); g.setAttribute('color', new T.BufferAttribute(col, 3)); g.setAttribute('uv', new T.BufferAttribute(uv, 2));
     g.setIndex(idx); g.computeVertexNormals();
-    const m = new T.Mesh(LP ? facetize(g, { sat: 1.3, gain: 1.08, steps: 18 }) : g, terrainMat); m.receiveShadow = true; scene.add(m); return m;
+    const m = new T.Mesh(LP ? facetize(g, { sat: 1.3, gain: 1.08, perVertex: true }) : g, terrainMat); m.receiveShadow = true; scene.add(m); return m;
   };
   for (let cz = minZ; cz < maxZ; cz += CH) for (let cx = minX; cx < maxX; cx += CH) {
     let near = false;

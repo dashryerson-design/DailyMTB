@@ -37,9 +37,13 @@ export function toonGradient() {   // 3-band cel shading ramp
 export function toonMat(o = {}) { const T = window.THREE; return new T.MeshToonMaterial({ gradientMap: toonGradient(), ...o }); }
 // flat-colour facets: every triangle gets one colour (its average), pushed brighter/more saturated and
 // stepped into a few tones, and a face normal - crisp cartoon facets instead of smeared gradients
-export function facetize(g, { sat = 1.3, gain = 1.12, steps = 7 } = {}) {
+export function facetize(g, { sat = 1.3, gain = 1.12, steps = 7, perVertex = false } = {}) {
   const T = window.THREE; if (g.index) g = g.toNonIndexed();
   const c = g.attributes.color; if (c) { const col = new T.Color(), hsl = {};
+    if (perVertex) {   // keep smooth per-vertex colour (soft, clean colour edges), just punch it up
+      for (let i = 0; i < c.count; i++) { col.setRGB(c.getX(i), c.getY(i), c.getZ(i)).convertLinearToSRGB().getHSL(hsl); col.setHSL(hsl.h, Math.min(1, hsl.s * sat), Math.min(1, hsl.l * gain)).convertSRGBToLinear(); c.setXYZ(i, col.r, col.g, col.b); }
+      c.needsUpdate = true; g.computeVertexNormals(); return g;
+    }
     for (let i = 0; i < c.count; i += 3) {
       let r = 0, gg = 0, b = 0; for (let k = 0; k < 3; k++) { r += c.getX(i + k); gg += c.getY(i + k); b += c.getZ(i + k); }
       col.setRGB(r / 3, gg / 3, b / 3).convertLinearToSRGB().getHSL(hsl);
