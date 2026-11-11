@@ -1,5 +1,6 @@
 // Terrain meshes (chunked, high-res near the trail), rocks, roots, vegetation, lighting, sky.
 import { SURF, rng, makeNoise } from '../terrain/track.js';
+import { Q, applySun } from './quality.js';
 import { pineGeo, pineFarGeo, pineMaterial, trunkGeo, cactusGeo, bushGeo, grassGeo, grassMaterial } from './flora.js';
 const T = window.THREE;
 
@@ -46,7 +47,7 @@ class Chunks {
       const dx = Math.max(0, Math.abs(p.x - c.cx) - this.cell / 2), dz = Math.max(0, Math.abs(p.z - c.cz) - this.cell / 2), d = Math.hypot(dx, dz);
       _sph.center.set(c.cx, c.cy, c.cz); _sph.radius = c.rad;
       const inView = d < 30 || _fr.intersectsSphere(_sph);   // close cells always (their shadows can fall into view)
-      c.mesh.forEach((m, l) => { if (!m) return; const L = this.layers[l]; m.visible = inView && d >= L.near && d < L.far; m.castShadow = m.visible && d < (L.shadow || 0); });
+      c.mesh.forEach((m, l) => { if (!m) return; const L = this.layers[l]; const f = Q[L.k] ?? Q.lod, nr = L.near * f, fr = L.far * f; m.visible = inView && d >= nr && d < fr; m.castShadow = Q.shadows && m.visible && d < (L.shadow || 0) * Q.shadowDist; });
     }
   }
   hide(id, on, layers) {   // tuck one object away (or restore it) in the given layers
@@ -74,10 +75,11 @@ export function buildWorld(scene0, track) {
   const tex = detailTexture(), noise = makeNoise(21);
   const terrainMat = new T.MeshStandardMaterial({ vertexColors: true, map: tex, bumpMap: tex, bumpScale: 0.025, roughness: 0.95, metalness: 0 });
   const { minX, maxX, minZ, maxZ } = track.bounds, CH = 32;
-  for (let cz = minZ; cz < maxZ; cz += CH) for (let cx = minX; cx < maxX; cx += CH) {
-    let near = false;
-    for (let z = cz; z <= cz + CH && !near; z += 2) for (let x = cx; x <= cx + CH; x += 2) if (track.trackDist(x, z) < 9) { near = true; break; }
-    const res = near ? 0.4 : 2.5, n = Math.round(CH / res), N = n + 3;
+  // chunks along the trail get a detailed mesh (by quality) plus a coarse one used once the camera is
+  // far away; skirts hide the seams where neighbouring chunks differ in detail
+  const terrLod = [];
+  const buildChunk = (cx, cz, n) => {
+    const res = CH / n, N = n + 3;
     const pos = new Float32Array(N * N * 3), col = new Float32Array(N * N * 3), uv = new Float32Array(N * N * 2), idx = [];
     for (let j = 0; j < N; j++) for (let i = 0; i < N; i++) {
       const ii = Math.min(Math.max(i - 1, 0), n), jj = Math.min(Math.max(j - 1, 0), n), skirt = ii !== i - 1 || jj !== j - 1;
@@ -103,7 +105,13 @@ export function buildWorld(scene0, track) {
     const g = new T.BufferGeometry();
     g.setAttribute('position', new T.BufferAttribute(pos, 3)); g.setAttribute('color', new T.BufferAttribute(col, 3)); g.setAttribute('uv', new T.BufferAttribute(uv, 2));
     g.setIndex(idx); g.computeVertexNormals();
-    const m = new T.Mesh(g, terrainMat); m.receiveShadow = true; scene.add(m);
+    const m = new T.Mesh(g, terrainMat); m.receiveShadow = true; scene.add(m); return m;
+  };
+  for (let cz = minZ; cz < maxZ; cz += CH) for (let cx = minX; cx < maxX; cx += CH) {
+    let near = false;
+    for (let z = cz; z <= cz + CH && !near; z += 2) for (let x = cx; x <= cx + CH; x += 2) if (track.trackDist(x, z) < 9) { near = true; break; }
+    const lo = buildChunk(cx, cz, 13);
+    if (near) { const hi = buildChunk(cx, cz, { high: 80, medium: 54, low: 40 }[Q.level]); hi.visible = false; terrLod.push({ hi, lo, x: cx + CH / 2, z: cz + CH / 2 }); }
   }
 
   // rocks (same footprint/height as their heightfield domes)
@@ -141,13 +149,13 @@ export function buildWorld(scene0, track) {
   const folMat = cactus ? new T.MeshStandardMaterial({ vertexColors: true, color: 0xffffff, roughness: 0.9 }) : pineMaterial(P.treeKind === 'snowpine');
   const farMat = new T.MeshStandardMaterial({ vertexColors: true, color: 0xffffff, roughness: 0.95 });
   const TREE_NEAR = 75, treeCh = new Chunks(root, [
-    { geo: folG, mat: folMat, depth: folMat.depth, near: 0, far: TREE_NEAR, shadow: 32, receive: true },
-    { geo: trunkG, mat: new T.MeshStandardMaterial({ vertexColors: true, roughness: 0.95, map: tex, bumpMap: tex, bumpScale: 0.02 }), near: 0, far: TREE_NEAR, shadow: 32 },
-    { geo: cactus ? folG : pineFarGeo(P.treeKind === 'snowpine'), mat: cactus ? folMat : farMat, near: TREE_NEAR, far: 600 },
+    { geo: folG, mat: folMat, depth: folMat.depth, near: 0, far: TREE_NEAR, k: 'tree', shadow: 32, receive: true },
+    { geo: trunkG, mat: new T.MeshStandardMaterial({ vertexColors: true, roughness: 0.95, map: tex, bumpMap: tex, bumpScale: 0.02 }), near: 0, far: TREE_NEAR, k: 'tree', shadow: 32 },
+    { geo: cactus ? folG : pineFarGeo(P.treeKind === 'snowpine'), mat: cactus ? folMat : farMat, near: TREE_NEAR, far: 600, k: 'tree' },
     // back rows (behind the trees lining the trail): mid-detail, no shadows, simple trunk
-    { geo: cactus ? folG : pineFarGeo(P.treeKind === 'snowpine', 6, 10), mat: cactus ? folMat : farMat, near: 0, far: TREE_NEAR, shadow: cactus ? 30 : 0, receive: true },
-    { geo: cactus ? trunkG : new T.CylinderGeometry(0.06, 0.15, 1, 6).translate(0, 0.5, 0), mat: new T.MeshStandardMaterial({ color: new T.Color(0x3a2a1e).convertSRGBToLinear(), roughness: 0.95 }), near: 0, far: TREE_NEAR },
-  ]); chunks.push(treeCh);
+    { geo: cactus ? folG : pineFarGeo(P.treeKind === 'snowpine', 6, 10), mat: cactus ? folMat : farMat, near: 0, far: TREE_NEAR, k: 'tree', shadow: cactus ? 30 : 0, receive: true },
+    { geo: cactus ? trunkG : new T.CylinderGeometry(0.06, 0.15, 1, 6).translate(0, 0.5, 0), mat: new T.MeshStandardMaterial({ color: new T.Color(0x3a2a1e).convertSRGBToLinear(), roughness: 0.95 }), near: 0, far: TREE_NEAR, k: 'tree' },
+  ], 32); chunks.push(treeCh);
   const treeId = trees.map(([x, z, s]) => { const y = track.h(x, z); q.setFromAxisAngle(new T.Vector3(0, 1, 0), r() * 6.28);
     const F = new T.Matrix4().compose(new T.Vector3(x, y, z), q, new T.Vector3(s, s, s)), Tr = cactus ? null : new T.Matrix4().compose(new T.Vector3(x, y, z), q, new T.Vector3(s, 7.2 * s, s));
     const front = cactus || track.trackDist(x, z) < 14;   // only the row lining the trail gets the full tree
@@ -160,7 +168,7 @@ export function buildWorld(scene0, track) {
     bushes.push([p.x, p.z, 0.25 + r() * 0.4]);
   }
   for (let i = 0; i < P.bushes * 3 && bushes.length < P.bushes + 900; i++) { const x = minX + r() * (maxX - minX), z = minZ + r() * (maxZ - minZ), d = track.trackDist(x, z); if (d < 2.9 || (d > 9 && r() < 0.6)) continue; bushes.push([x, z, 0.3 + r() * 0.6]); }
-  const bushCh = new Chunks(root, [{ geo: bushG, mat: new T.MeshStandardMaterial({ vertexColors: true, color: 0xffffff, roughness: 0.92 }), near: 0, far: 110, shadow: 30, receive: true }]); chunks.push(bushCh);
+  const bushCh = new Chunks(root, [{ geo: bushG, mat: new T.MeshStandardMaterial({ vertexColors: true, color: 0xffffff, roughness: 0.92 }), near: 0, far: 110, shadow: 30, receive: true, k: 'bush' }]); chunks.push(bushCh);
   bushes.forEach(([x, z, s]) => { q.setFromAxisAngle(new T.Vector3(0, 1, 0), r() * 6.28); const y = track.h(x, z) - s * 0.08; bushCh.add(x, y, z, [new T.Matrix4().compose(new T.Vector3(x, y, z), q, new T.Vector3(s * 1.3, s, s * 1.2))], new T.Color(0.8 + r() * 0.3, 0.8 + r() * 0.3, 0.78 + r() * 0.22)); });
   bushCh.build();
   // grass tufts: lush in the forest, sparse dry clumps in the desert, none on snow
@@ -171,7 +179,7 @@ export function buildWorld(scene0, track) {
       const sv = r() * track.total, p = track.toWorld(sv, (r() < 0.5 ? -1 : 1) * (TW + 0.5 + r() ** 1.6 * 16)), d = track.trackDist(p.x, p.z);
       if (d < TW + 0.4 || track.surface(p.x, p.z) === SURF.ROCK) continue; tufts.push([p.x, p.z, 0.5 + r() * 0.9]);
     }
-    const grassCh = new Chunks(root, [{ geo: grassGeo(), mat: grassMaterial(), near: 0, far: 50, receive: true }], 32); chunks.push(grassCh);
+    const grassCh = new Chunks(root, [{ geo: grassGeo(), mat: grassMaterial(), near: 0, far: 50, receive: true, k: 'grass' }], 32); chunks.push(grassCh);
     tufts.forEach(([x, z, s]) => { q.setFromAxisAngle(new T.Vector3(0, 1, 0), r() * 6.28); const y = track.h(x, z) - 0.03;
       const c = dry ? new T.Color().setHSL(0.11 + r() * 0.03, 0.35, 0.42 + r() * 0.12) : new T.Color().setHSL(0.2 + r() * 0.06, 0.45, 0.22 + r() * 0.1);
       grassCh.add(x, y, z, [new T.Matrix4().compose(new T.Vector3(x, y, z), q, new T.Vector3(s, s * (0.8 + r() * 0.6), s))], c.convertSRGBToLinear()); });
@@ -181,7 +189,7 @@ export function buildWorld(scene0, track) {
   // sky, fog, lights
   const sky = new T.Color(P.sky); scene0.background = sky; scene0.fog = new T.Fog(sky, P.fog[0], P.fog[1]);
   scene.add(new T.HemisphereLight(P.hemi[0], P.hemi[1], 0.55));
-  const sun = new T.DirectionalLight(P.sun, 2.1); sun.castShadow = true; sun.shadow.mapSize.set(2048, 2048);
+  const sun = new T.DirectionalLight(P.sun, 2.1); sun.castShadow = true; sun.shadow.mapSize.set(Q.shadowMap, Q.shadowMap); applySun(sun);
   Object.assign(sun.shadow.camera, { left: -18, right: 18, top: 18, bottom: -18, near: 1, far: 120 }); sun.shadow.bias = -0.0004; sun.shadow.normalBias = 0.02;
   scene.add(sun, sun.target);
   // trees right next to the camera (it swings wide in tight, tree-lined turns) are tucked away so the view stays clear
@@ -193,6 +201,8 @@ export function buildWorld(scene0, track) {
       if (near !== hidden.has(i)) { if (near) hidden.add(i); else hidden.delete(i); treeCh.hide(treeId[i], near, [0, 1, 3, 4]); }
     });
     for (const ch of chunks) ch.update(cam);
+    const tr = 70 * Q.lod;   // detailed terrain only near the camera
+    for (const t of terrLod) { const dx = Math.max(0, Math.abs(c.x - t.x) - CH / 2), dz = Math.max(0, Math.abs(c.z - t.z) - CH / 2), on = dx * dx + dz * dz < tr * tr; t.hi.visible = on; t.lo.visible = !on; }
   };
   return { sun, root, clearView };
 }

@@ -7,6 +7,7 @@ import { RiderModel } from './render/riderModel.js';
 import { buildWorld, envMap } from './render/world.js';
 import { CameraRig, CAM_MODES } from './render/camera.js';
 import { Sound } from './game/sound.js';
+import { Q as GFX, setQuality, applyRenderer, applySun } from './render/quality.js';
 import { Dust } from './render/dust.js';
 import { Input } from './game/input.js';
 const T = window.THREE;
@@ -18,9 +19,9 @@ const fmt = (t) => `${Math.floor(t / 60)}:${(t % 60).toFixed(1).padStart(4, '0')
 
 // ---- renderer + persistent scene objects
 const renderer = new T.WebGLRenderer({ antialias: true, canvas: $('view') });
-renderer.setPixelRatio(Math.min(devicePixelRatio, 2));
+renderer.setPixelRatio(Math.min(devicePixelRatio, 2));   // (overridden by the quality preset below)
 renderer.outputEncoding = T.sRGBEncoding; renderer.toneMapping = T.ACESFilmicToneMapping; renderer.toneMappingExposure = 1.05;
-renderer.shadowMap.enabled = true; renderer.shadowMap.type = T.PCFSoftShadowMap;
+renderer.shadowMap.enabled = true; renderer.shadowMap.type = T.PCFSoftShadowMap; applyRenderer(renderer);
 const scene = new T.Scene(), cam = new T.PerspectiveCamera(62, 1, 0.05, 700);
 scene.environment = envMap(renderer);
 const dust = new Dust(scene), model = new BikeModel(scene), riderModel = new RiderModel(scene), input = new Input();
@@ -95,6 +96,10 @@ for (const [k, id] of Object.entries({ master: 'volMaster', bike: 'volBike', amb
   el.oninput = () => { snd.setVol(k, el.value / 100); lab.textContent = el.value + '%'; fill(); };
   el.onchange = () => { el.blur(); snd.preview(k); };
 }
+// graphics quality (pause menu): applies instantly
+const qualLabel = () => document.querySelectorAll('#qualSel button').forEach(b => b.classList.toggle('on', b.dataset.q === GFX.level));
+document.querySelectorAll('#qualSel button').forEach(b => b.onclick = () => { setQuality(b.dataset.q); applyRenderer(renderer); resize(); if (L) applySun(L.sun); qualLabel(); });
+qualLabel();
 const muteLabel = () => { $('muteBtn').innerHTML = `<span>${snd.muted ? 'Unmute' : 'Mute'}</span>`; }; muteLabel();
 $('muteBtn').onclick = () => { snd.setMuted(!snd.muted); muteLabel(); };
 // every new track comes from the Extreme track generator (no generator choice for the player)
