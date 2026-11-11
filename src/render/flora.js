@@ -73,12 +73,12 @@ export function pineGeo(snowy, seed = 0) {
   return mergeUV(parts);
 }
 // distant stand-in: a few lumpy, drooping tiers (~100 triangles) coloured like the near tree seen through haze
-export function pineFarGeo(snowy) {
+export function pineFarGeo(snowy, tiers = 4, segs = 8) {   // tiers/segs up = the mid-detail back-row tree
   const parts = [];
-  for (let k = 0; k < 4; k++) {
-    const u = k / 3, rad = 2.5 * (1 - u * 0.8) + 0.2, h = 2.4 - 0.5 * u, y0 = 1.2 + u * 4.9;
-    const c = new T.ConeGeometry(rad, h, 8, 1, true); c.translate(0, y0 + h / 2, 0);
-    displace(c, (x, y, z) => { const a = Math.atan2(z, x), f = 1 + 0.18 * Math.sin(a * 5 + k); return [x * f, y, z * f]; });
+  for (let k = 0; k < tiers; k++) {
+    const u = k / (tiers - 1), rad = 2.5 * (1 - u * 0.8) + 0.2, h = (2.4 - 0.5 * u) * 4 / tiers + 0.6, y0 = 1.2 + u * 4.9;
+    const c = new T.ConeGeometry(rad, h, segs, 1, true); c.translate(0, y0 + h / 2, 0);
+    displace(c, (x, y, z) => { const a = Math.atan2(z, x), r = Math.hypot(x, z) / rad, f = 1 + 0.18 * Math.sin(a * 5 + k) + 0.1 * nz(a * 3 + k, k); return [x * f, y - 0.25 * r * r, z * f]; });
     parts.push(paint(c, (x, y, z, nx, ny) => { let col = mix([0.07, 0.12, 0.06], [0.15, 0.24, 0.11], Math.min(1, Math.hypot(x, z) / rad)); if (snowy && ny > 0.3) col = mix(col, [0.85, 0.88, 0.93], 0.55); return col; }));
   }
   return merge(parts);

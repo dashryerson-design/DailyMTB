@@ -141,13 +141,17 @@ export function buildWorld(scene0, track) {
   const folMat = cactus ? new T.MeshStandardMaterial({ vertexColors: true, color: 0xffffff, roughness: 0.9 }) : pineMaterial(P.treeKind === 'snowpine');
   const farMat = new T.MeshStandardMaterial({ vertexColors: true, color: 0xffffff, roughness: 0.95 });
   const TREE_NEAR = 75, treeCh = new Chunks(root, [
-    { geo: folG, mat: folMat, depth: folMat.depth, near: 0, far: TREE_NEAR, shadow: 40, receive: true },
-    { geo: trunkG, mat: new T.MeshStandardMaterial({ vertexColors: true, roughness: 0.95, map: tex, bumpMap: tex, bumpScale: 0.02 }), near: 0, far: TREE_NEAR, shadow: 40 },
+    { geo: folG, mat: folMat, depth: folMat.depth, near: 0, far: TREE_NEAR, shadow: 32, receive: true },
+    { geo: trunkG, mat: new T.MeshStandardMaterial({ vertexColors: true, roughness: 0.95, map: tex, bumpMap: tex, bumpScale: 0.02 }), near: 0, far: TREE_NEAR, shadow: 32 },
     { geo: cactus ? folG : pineFarGeo(P.treeKind === 'snowpine'), mat: cactus ? folMat : farMat, near: TREE_NEAR, far: 600 },
+    // back rows (behind the trees lining the trail): mid-detail, no shadows, simple trunk
+    { geo: cactus ? folG : pineFarGeo(P.treeKind === 'snowpine', 6, 10), mat: cactus ? folMat : farMat, near: 0, far: TREE_NEAR, shadow: cactus ? 30 : 0, receive: true },
+    { geo: cactus ? trunkG : new T.CylinderGeometry(0.06, 0.15, 1, 6).translate(0, 0.5, 0), mat: new T.MeshStandardMaterial({ color: new T.Color(0x3a2a1e).convertSRGBToLinear(), roughness: 0.95 }), near: 0, far: TREE_NEAR },
   ]); chunks.push(treeCh);
   const treeId = trees.map(([x, z, s]) => { const y = track.h(x, z); q.setFromAxisAngle(new T.Vector3(0, 1, 0), r() * 6.28);
     const F = new T.Matrix4().compose(new T.Vector3(x, y, z), q, new T.Vector3(s, s, s)), Tr = cactus ? null : new T.Matrix4().compose(new T.Vector3(x, y, z), q, new T.Vector3(s, 7.2 * s, s));
-    return treeCh.add(x, y, z, [F, Tr, F], new T.Color(0.85 + r() * 0.25, 0.85 + r() * 0.25, 0.8 + r() * 0.2)); });
+    const front = cactus || track.trackDist(x, z) < 14;   // only the row lining the trail gets the full tree
+    return treeCh.add(x, y, z, front ? [F, Tr, F, null, null] : [null, null, F, F, cactus ? null : Tr], new T.Color(0.85 + r() * 0.25, 0.85 + r() * 0.25, 0.8 + r() * 0.2)); });
   treeCh.build();
   const bushG = bushGeo(track.biome === 'test' ? 'forest' : track.biome), bushes = [];
   for (let sv = 0; sv < track.total; sv += 1.6) for (const sd of [-1, 1]) {      // low undergrowth along the trail edge
@@ -186,7 +190,7 @@ export function buildWorld(scene0, track) {
     const c = cam.position;
     trees.forEach(([x, z, s], i) => {
       const near = (x - c.x) ** 2 + (z - c.z) ** 2 < (2.6 * s + 1.2) ** 2;
-      if (near !== hidden.has(i)) { if (near) hidden.add(i); else hidden.delete(i); treeCh.hide(treeId[i], near, [0, 1]); }
+      if (near !== hidden.has(i)) { if (near) hidden.add(i); else hidden.delete(i); treeCh.hide(treeId[i], near, [0, 1, 3, 4]); }
     });
     for (const ch of chunks) ch.update(cam);
   };
