@@ -106,6 +106,8 @@ kbd { font: 500 10.5px var(--mono); background: rgba(255,255,255,0.08); border: 
 .seg button { height: 38px; background: transparent; border: 0; color: var(--dim); font: 700 14px var(--display); letter-spacing: 0.16em; text-transform: uppercase; cursor: pointer; transition: background var(--t), color var(--t); }
 .seg button + button { box-shadow: inset 1px 0 0 var(--line); } .seg button:hover { color: var(--ink); background: rgba(46,168,255,0.08); }
 .seg button.on { background: var(--accent); color: #fff; }
+.menuQual { display: grid; justify-items: center; gap: 10px; } .menuQual > span { font: 500 10.5px var(--mono); letter-spacing: 0.3em; color: var(--dim); text-transform: uppercase; }
+.menuQual .seg { width: 260px; background: rgba(12,16,20,0.6); } .menuQual .seg button { height: 34px; font-size: 13px; }
 .mix .hint { color: var(--faint); font: 500 10.5px var(--mono); letter-spacing: 0.04em; line-height: 1.5; }
 input[type=range] { -webkit-appearance: none; appearance: none; width: 100%; height: 3px; background: linear-gradient(90deg, var(--accent), var(--accent)) 0/var(--p, 100%) 100% no-repeat, rgba(255,255,255,0.12); border-radius: 2px; outline: none; }
 input[type=range]::-webkit-slider-thumb { -webkit-appearance: none; width: 14px; height: 14px; background: #fff; border-radius: 1px; transform: rotate(45deg); box-shadow: 0 0 0 3px rgba(46,168,255,0.35); cursor: pointer; }
@@ -178,6 +180,7 @@ input[type=range]::-moz-range-thumb { width: 12px; height: 12px; background: #ff
     <div class="tag">Downhill · A new trail every ride</div>
   </div>
   <button class="btn hero" id="playBtn"><span>Play</span></button>
+  <div class="menuQual"><span>Graphics</span><div class="seg qualSel"><button data-q="low">Low</button><button data-q="medium">Medium</button><button data-q="high">High</button></div></div>
   <div class="menuFoot">EXTREME TRACK GENERATOR · SNOW · DESERT · FOREST</div>
 </div>
 <div id="biomeMenu" class="screen" hidden>
@@ -198,7 +201,7 @@ input[type=range]::-moz-range-thumb { width: 12px; height: 12px; background: #ff
 <div id="pauseMenu" class="screen" hidden>
   <h2><span class="eyebrow">Paused</span><br>Settings<small>P or Esc to resume</small></h2>
   <div class="mix"><h3>GRAPHICS</h3>
-    <div class="seg" id="qualSel"><button data-q="low">Low</button><button data-q="medium">Medium</button><button data-q="high">High</button></div>
+    <div class="seg qualSel" id="qualSel"><button data-q="low">Low</button><button data-q="medium">Medium</button><button data-q="high">High</button></div>
     <small class="hint">Medium/Low: lower render resolution, fewer & sharper shadows, shorter detail distances. Use on tablets and phones.</small>
   </div>
   <div class="mix"><h3>SOUND</h3>

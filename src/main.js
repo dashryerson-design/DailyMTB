@@ -97,8 +97,8 @@ for (const [k, id] of Object.entries({ master: 'volMaster', bike: 'volBike', amb
   el.onchange = () => { el.blur(); snd.preview(k); };
 }
 // graphics quality (pause menu): applies instantly
-const qualLabel = () => document.querySelectorAll('#qualSel button').forEach(b => b.classList.toggle('on', b.dataset.q === GFX.level));
-document.querySelectorAll('#qualSel button').forEach(b => b.onclick = () => { setQuality(b.dataset.q); applyRenderer(renderer); resize(); if (L) applySun(L.sun); qualLabel(); });
+const qualLabel = () => document.querySelectorAll('.qualSel button').forEach(b => b.classList.toggle('on', b.dataset.q === GFX.level));
+document.querySelectorAll('.qualSel button').forEach(b => b.onclick = () => { setQuality(b.dataset.q); applyRenderer(renderer); resize(); if (L) applySun(L.sun); qualLabel(); });
 qualLabel();
 const muteLabel = () => { $('muteBtn').innerHTML = `<span>${snd.muted ? 'Unmute' : 'Mute'}</span>`; }; muteLabel();
 $('muteBtn').onclick = () => { snd.setMuted(!snd.muted); muteLabel(); };
