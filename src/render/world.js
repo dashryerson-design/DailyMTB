@@ -59,7 +59,7 @@ class Chunks {
 // per-biome look: ground colours, rocks, sky/fog, vegetation
 export const PAL = {
   forest: { dirt: [0.33, 0.22, 0.13], trail: [0.36, 0.25, 0.15], edge: [0.17, 0.12, 0.08], off: [0.21, 0.29, 0.10], rock: 0x6c7262, sky: 0xa7c2d8, fog: [70, 280], hemi: [0xcfe3ff, 0x4a3a28], sun: 0xfff0d8, trees: 1500, treeKind: 'pine', fol: [0.33, 0.35, 0.16], bushes: 1600, bush: [0.26, 0.4, 0.16] },
-  snow: { dirt: [0.66, 0.70, 0.77], trail: [0.6, 0.66, 0.78], edge: [0.99, 1.0, 1.0], off: [0.93, 0.95, 0.98], rock: 0x8a8e94, sky: 0xc5d3e2, fog: [60, 260], hemi: [0xe6f0ff, 0x8a96a8], sun: 0xffffff, trees: 800, treeKind: 'snowpine', fol: [0.38, 0.25, 0.2], bushes: 350, bush: [0.6, 0.05, 0.85] },
+  snow: { dirt: [0.66, 0.70, 0.77], trail: [0.46, 0.53, 0.66], edge: [0.78, 0.84, 0.93], off: [0.93, 0.95, 0.98], rock: 0x8a8e94, sky: 0xc5d3e2, fog: [60, 260], hemi: [0xe6f0ff, 0x8a96a8], sun: 0xffffff, trees: 800, treeKind: 'snowpine', fol: [0.38, 0.25, 0.2], bushes: 350, bush: [0.6, 0.05, 0.85] },
   desert: { dirt: [0.62, 0.45, 0.30], trail: [0.52, 0.36, 0.23], edge: [0.66, 0.50, 0.34], off: [0.84, 0.71, 0.52], rock: 0xb3683f, sky: 0xd8c8a6, fog: [80, 320], hemi: [0xfff1d6, 0x9a6a40], sun: 0xffe7c2, trees: 260, treeKind: 'cactus', fol: [0.28, 0.35, 0.28], bushes: 700, bush: [0.12, 0.25, 0.32] },
 };
 PAL.test = PAL.forest;
@@ -97,7 +97,7 @@ export function buildWorld(scene0, track) {
       // the ridden line: a packed, worn tread with a ragged edge, two tyre ruts and a band of churned
       // material kicked to the sides - its own colour so it reads clearly against the ground around it
       const jit = 0.28 * noise(x / 2.1 + 3, z / 2.1), mask = 1 - Math.min(1, Math.max(0, (td - (TW - 0.15 + jit)) / 0.3));
-      const tb = (s === SURF.DIRT || s === SURF.SNOW || offLike) ? P.trail : base;
+      const tb = (s === SURF.DIRT || s === SURF.SNOW || offLike) ? (LP && track.biome === 'snow' ? [0.36, 0.47, 0.7] : P.trail) : base;   // cartoon snow: punchier blue packed trail
       const rut = 1 - (LP ? 0.07 : track.biome === 'snow' ? 0.24 : 0.16) * Math.exp(-(((td - 0.32) / 0.11) ** 2)) * (0.7 + 0.3 * m2), grain = LP ? 0.97 + 0.06 * m : 0.88 + 0.2 * m2 + 0.06 * m;   // cartoon: clean, even trail colour
       const trailC = tb.map((v) => v * rut * grain * (1 + 0.06 * Math.exp(-((td / 0.18) ** 2))));
       let c = offC.map((v, q) => v + (trailC[q] - v) * mask);
