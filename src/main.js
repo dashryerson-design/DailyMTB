@@ -59,6 +59,23 @@ function toMenu() { setPause(false); mode = 'menu'; show('biomeMenu'); }
 function disposeTree(o) { o.traverse(n => { if (n.geometry) n.geometry.dispose(); if (n.material) [].concat(n.material).forEach(m => m.dispose()); }); o.parent && o.parent.remove(o); }
 
 // start / finish gates
+// checkpoint marker: a red flag on a slim pole either side of the trail
+const flagMat = new T.MeshStandardMaterial({ color: new T.Color(0xd8261c).convertSRGBToLinear(), roughness: 0.8, side: T.DoubleSide });
+const poleMat = new T.MeshStandardMaterial({ color: 0xd9dde0, roughness: 0.4, metalness: 0.5 });
+const flagGeo = (() => { const g = new T.PlaneGeometry(0.85, 0.58, 8, 1), p = g.attributes.position;
+  for (let i = 0; i < p.count; i++) { const x = p.getX(i) + 0.425; p.setXYZ(i, x, p.getY(i), 0.06 * Math.sin(x * 7) * x); }   // cloth ripple, fixed at the pole
+  g.computeVertexNormals(); return g; })();
+function flags(track, s) {
+  const grp = new T.Group(), c = track.sampleAt(s);
+  for (const sd of [-1, 1]) {
+    const p = track.toWorld(s, sd * 2.6), y = track.h(p.x, p.z);
+    const pole = new T.Mesh(new T.CylinderGeometry(0.025, 0.03, 2.4, 8), poleMat); pole.position.set(p.x, y + 1.2, p.z); pole.castShadow = true; grp.add(pole);
+    const f = new T.Mesh(flagGeo, flagMat); f.castShadow = true;
+    f.position.set(p.x, y + 2.08, p.z); f.rotation.y = Math.atan2(-sd * Math.cos(c.psi), -sd * Math.sin(c.psi));   // flies outward from the trail, face-on to the approaching rider
+    grp.add(f);
+  }
+  return grp;
+}
 function gate(track, s, text, color) {
   const g = new T.Group(), p = track.sampleAt(s), y = track.h(p.x, p.z), right = new T.Vector3(-Math.sin(p.psi), 0, Math.cos(p.psi));
   const post = new T.MeshStandardMaterial({ color: 0x222222, roughness: 0.6 });
@@ -92,7 +109,7 @@ function load(b) {
     w.root.add(gate(track, 6, 'START', '#f4efe6'), gate(track, track.total - 8, 'FINISH', '#ff6a1a'));
     // 5 checkpoints spread evenly along the run (nudged off jumps/drops so you never respawn on a lip)
     const cps = [1, 2, 3, 4, 5].map(i => { let cs = track.total * i / 6; for (let k = 0; k < 40; k++) { const sg = track.segs.find(g => cs >= g.s0 - 2 && cs < g.s0 + g.len + 2); if (!sg || !sg.feat) break; cs = sg.s0 + sg.len + 4; } return cs; });
-    cps.forEach((cs, i) => w.root.add(gate(track, cs, `CHECKPOINT ${i + 1}`, '#e3b448')));
+    cps.forEach((cs) => w.root.add(flags(track, cs)));
     L = { track, sys, bike: sys.bike, rider: sys.rider, rig: new CameraRig(cam, track), world: w.root, sun: w.sun, clearView: w.clearView, cps, cp: 0, section: 0, hist: [], visLean: 0, runT: 0, started: false, done: false, si: 0, extreme, rec: [], recT: 0, best: null };
     const names = track.sections.slice(0, 9);
     $('sections').innerHTML = names.map((s, i) => `<li><kbd>${i + 1}</kbd> ${s.name}</li>`).join('');
