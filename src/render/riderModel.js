@@ -1,103 +1,72 @@
-// Stylised blocky rider: one rounded-box mesh per body segment, each placed every frame from the
-// simulated joint positions (no skinning, no animation - what you see is the physics state).
-import { J } from '../physics/rider.js';
+// Rider visual. A set of named attachment slots (one per bone) is placed every frame from the 17 joint
+// positions produced by the procedural pose (or the ragdoll after a crash). Gear is modular: each
+// component (helmet, jersey, pants, protection, gloves, shoes, body) is built by its own function into
+// those slots and can be swapped independently with setComponent(). Slot frame: X = front, Y = along
+// the bone (from its first joint), Z = right; the origin sits on the first joint.
+import { J, SEG } from '../physics/rider.js';
+import { DEFAULT_OUTFIT } from './rider/outfit.js';
 const T = window.THREE;
 
-function roundedBox(w, h, d, r, seg = 3) {
-  const g = new T.BoxGeometry(w, h, d, seg, seg, seg), p = g.attributes.position, v = new T.Vector3(), inner = new T.Vector3();
-  const hw = w / 2 - r, hh = h / 2 - r, hd = d / 2 - r;
-  for (let i = 0; i < p.count; i++) {
-    v.fromBufferAttribute(p, i);
-    inner.set(Math.max(-hw, Math.min(hw, v.x)), Math.max(-hh, Math.min(hh, v.y)), Math.max(-hd, Math.min(hd, v.z)));
-    v.sub(inner); if (v.lengthSq() > 1e-12) v.setLength(r); v.add(inner); p.setXYZ(i, v.x, v.y, v.z);
-  }
-  g.computeVertexNormals(); return g;
-}
-const mat = (hex, rough = 0.7, metal = 0) => { const m = new T.MeshStandardMaterial({ color: hex, roughness: rough, metalness: metal }); m.color.convertSRGBToLinear(); return m; };
-const C = {
-  jersey: mat(0x1f3b73, 0.8), accent: mat(0xf26b1d, 0.6), pants: mat(0x2b2e33, 0.85), pad: mat(0x151617, 0.5),
-  helmet: mat(0xeef0f2, 0.3, 0.1), goggle: mat(0x0d0d0e, 0.15, 0.6), lens: mat(0xd88a2a, 0.1, 0.8), glove: mat(0x18191b, 0.7), shoe: mat(0x3a3d42, 0.75), sole: mat(0x111111, 0.9),
-};
+const SLOTS = ['pelvis', 'belly', 'chest', 'neck', 'head', ...['shoulder', 'upper', 'elbow', 'fore', 'hand', 'thigh', 'knee', 'shin', 'foot'].flatMap((n) => [n + 'L', n + 'R'])];
+// nominal bone lengths: a slot is stretched along Y by actual/nominal so gear stays attached at both ends
+const NOMINAL = { belly: SEG.lumbar, chest: SEG.thorax, neck: SEG.neck, upper: SEG.upper, fore: SEG.fore, thigh: SEG.thigh, shin: SEG.shin };
 
-const X = new T.Vector3(), Yv = new T.Vector3(), Z = new T.Vector3(), M = new T.Matrix4(), tmp = new T.Vector3();
-// orient an object: local Y along a->b, local Z toward `side`, centred between a and b (+ offset along Y)
-function orient(o, a, b, side, along = 0) {
-  Yv.subVectors(b, a); const L = Yv.length(); Yv.multiplyScalar(1 / (L || 1));
-  Z.copy(side).addScaledVector(Yv, -side.dot(Yv)); if (Z.lengthSq() < 1e-8) Z.set(0, 0, 1); Z.normalize();
-  X.crossVectors(Yv, Z).normalize(); M.makeBasis(X, Yv, Z);
-  o.quaternion.setFromRotationMatrix(M);
-  o.position.copy(a).addScaledVector(Yv, L / 2 + along);
+const Xv = new T.Vector3(), Yv = new T.Vector3(), Zv = new T.Vector3(), Mb = new T.Matrix4(), tA = new T.Vector3(), tB = new T.Vector3();
+// place slot o at a, Y toward b, X toward hint (made perpendicular), optional Y stretch to match a nominal length
+function place(o, a, b, hint, nominal) {
+  Yv.subVectors(b, a); const L = Yv.length() || 1; Yv.multiplyScalar(1 / L);
+  Xv.copy(hint).addScaledVector(Yv, -hint.dot(Yv)); if (Xv.lengthSq() < 1e-8) Xv.set(0, 1, 0).addScaledVector(Yv, -Yv.y); Xv.normalize();
+  Zv.crossVectors(Xv, Yv); Mb.makeBasis(Xv, Yv, Zv); o.quaternion.setFromRotationMatrix(Mb); o.position.copy(a);
+  o.scale.set(1, nominal ? L / nominal : 1, 1);
 }
 
 export class RiderModel {
-  constructor(scene) {
-    const g = this.group = new T.Group(); scene.add(g);
-    const part = (geo, m) => { const o = new T.Mesh(geo, m); o.castShadow = true; o.receiveShadow = true; g.add(o); return o; };
-    const grp = () => { const o = new T.Group(); g.add(o); return o; };
-    const P = this.p = {};
-    // torso
-    P.pelvis = part(roundedBox(0.22, 0.17, 0.34, 0.05), C.pants);
-    P.belly = part(roundedBox(0.2, 0.27, 0.3, 0.06), C.jersey);
-    P.chest = grp();
-    const ch = new T.Mesh(roundedBox(0.24, 0.34, 0.4, 0.07), C.jersey); ch.castShadow = true; P.chest.add(ch);
-    const stripe = new T.Mesh(roundedBox(0.245, 0.06, 0.405, 0.02), C.accent); stripe.position.y = 0.05; P.chest.add(stripe);
-    const num = new T.Mesh(roundedBox(0.01, 0.12, 0.12, 0.004), C.helmet); num.position.set(-0.122, 0.0, 0); P.chest.add(num);
-    P.neck = part(roundedBox(0.08, 0.1, 0.09, 0.03), C.pants);
-    // head + full-face helmet + goggles
-    P.head = grp();
-    const add = (o, x, y, z) => { o.position.set(x, y, z); o.castShadow = true; P.head.add(o); return o; };
-    add(new T.Mesh(roundedBox(0.28, 0.27, 0.25, 0.09), C.helmet), 0, 0, 0);
-    add(new T.Mesh(roundedBox(0.1, 0.11, 0.2, 0.04), C.helmet), 0.13, -0.11, 0);                 // chin bar
-    add(new T.Mesh(roundedBox(0.04, 0.05, 0.12, 0.015), C.goggle), 0.18, -0.11, 0);                // vent
-    add(new T.Mesh(roundedBox(0.08, 0.025, 0.22, 0.01), C.accent), 0.15, 0.1, 0).rotation.z = -0.25; // peak
-    add(new T.Mesh(roundedBox(0.05, 0.065, 0.2, 0.02), C.goggle), 0.14, 0.0, 0);
-    add(new T.Mesh(roundedBox(0.012, 0.045, 0.17, 0.008), C.lens), 0.166, 0.0, 0);
-    add(new T.Mesh(roundedBox(0.2, 0.03, 0.258, 0.012), C.accent), -0.04, 0.0, 0);                 // goggle strap / stripe
-    // limbs
-    for (const s of ['L', 'R']) {
-      P['thigh' + s] = part(roundedBox(0.15, 0.47, 0.15, 0.05), C.pants);
-      P['shin' + s] = part(roundedBox(0.115, 0.46, 0.115, 0.04), C.pants);
-      P['knee' + s] = grp();
-      const kp = new T.Mesh(roundedBox(0.07, 0.17, 0.13, 0.03), C.pad); kp.position.x = 0.07; kp.castShadow = true; P['knee' + s].add(kp);
-      const ks = new T.Mesh(roundedBox(0.072, 0.03, 0.132, 0.01), C.accent); ks.position.set(0.072, 0.03, 0); P['knee' + s].add(ks);
-      P['foot' + s] = grp();
-      const sh = new T.Mesh(roundedBox(0.1, 0.25, 0.105, 0.035), C.shoe); sh.castShadow = true; P['foot' + s].add(sh);
-      const so = new T.Mesh(roundedBox(0.025, 0.26, 0.11, 0.01), C.sole); so.position.x = -0.05; P['foot' + s].add(so);
-      P['upper' + s] = part(roundedBox(0.1, 0.34, 0.1, 0.035), C.jersey);
-      P['fore' + s] = part(roundedBox(0.085, 0.33, 0.085, 0.03), C.jersey);
-      P['cuff' + s] = part(roundedBox(0.095, 0.05, 0.095, 0.02), C.accent);
-      P['hand' + s] = part(roundedBox(0.075, 0.11, 0.095, 0.03), C.glove);
-      P['pad' + s] = part(roundedBox(0.13, 0.11, 0.13, 0.045), C.accent);
-    }
+  constructor(scene, outfit = DEFAULT_OUTFIT) {
+    this.group = new T.Group(); scene.add(this.group);
+    this.slots = {}; for (const n of SLOTS) { const g = new T.Group(); g.name = n; this.slots[n] = g; this.group.add(g); }
+    this.parts = {}; this.opts = {};
+    for (const [k, f] of Object.entries(outfit)) this.setComponent(k, f);
     this.v = Array.from({ length: 17 }, () => new T.Vector3());
   }
+  // swap one gear component (e.g. setComponent('helmet', openFaceHelmet, { shell: 0x222222 }))
+  setComponent(kind, build, opts = this.opts[kind] || {}) {
+    for (const m of this.parts[kind] || []) { m.parent && m.parent.remove(m); m.traverse((o) => o.geometry && o.geometry.dispose()); }
+    this.opts[kind] = opts; this.parts[kind] = build ? build(this.slots, opts) : [];
+  }
 
-  update(rider, bike) {
+  update(rider) {
     const v = this.v; rider.x.forEach((p, i) => v[i].set(p.x, p.y, p.z));
-    const P = this.p, side = new T.Vector3().subVectors(v[J.hipR], v[J.hipL]).normalize();
-    const shSide = new T.Vector3().subVectors(v[J.shR], v[J.shL]).normalize();
+    const S = this.slots;
     const hipM = new T.Vector3().addVectors(v[J.hipL], v[J.hipR]).multiplyScalar(0.5);
+    const side = new T.Vector3().subVectors(v[J.hipR], v[J.hipL]).normalize();
     const up = new T.Vector3().subVectors(v[J.spine], hipM).normalize();
-    // pelvis: Y = up the spine, Z = across the hips
-    orient(P.pelvis, hipM, tmp.copy(hipM).addScaledVector(up, 0.001), side); P.pelvis.position.copy(hipM).addScaledVector(up, 0.02);
-    orient(P.belly, hipM, v[J.spine], side, 0.02);
-    orient(P.chest, v[J.spine], v[J.neck], shSide, 0.0);
-    orient(P.neck, v[J.neck], v[J.head], shSide, -0.06);
-    orient(P.head, v[J.neck], v[J.head], shSide); P.head.position.copy(v[J.head]);
-    // the helmet's forward (local +X) should face where the chest faces
-    for (const [s, hp, kn, an, to, sh, el, hd] of [['L', J.hipL, J.kneeL, J.ankL, J.toeL, J.shL, J.elbL, J.handL], ['R', J.hipR, J.kneeR, J.ankR, J.toeR, J.shR, J.elbR, J.handR]]) {
-      orient(P['thigh' + s], v[hp], v[kn], side);
-      orient(P['shin' + s], v[kn], v[an], side);
-      orient(P['knee' + s], v[kn], v[an], side); P['knee' + s].position.copy(v[kn]);
-      // shoe: lies along ankle->toe, sole down (toward the pedal)
-      const footUp = new T.Vector3().subVectors(v[kn], v[an]).normalize();
-      orient(P['foot' + s], v[an], v[to], footUp); P['foot' + s].rotateY(Math.PI / 2); P['foot' + s].position.copy(v[an]).lerp(v[to], 0.45).addScaledVector(footUp, -0.01);
-      orient(P['upper' + s], v[sh], v[el], side);
-      orient(P['fore' + s], v[el], v[hd], side);
-      orient(P['cuff' + s], v[el], v[hd], side, 0.13);
-      const fd = new T.Vector3().subVectors(v[hd], v[el]).normalize();
-      orient(P['hand' + s], v[hd], tmp.copy(v[hd]).addScaledVector(fd, 0.05), side); P['hand' + s].position.copy(v[hd]).addScaledVector(fd, 0.01);
-      orient(P['pad' + s], v[sh], v[el], side); P['pad' + s].position.copy(v[sh]).addScaledVector(up, 0.01);
+    const fwd = new T.Vector3().crossVectors(up, side).normalize();                     // body's facing (works for the ragdoll too)
+    const shSide = new T.Vector3().subVectors(v[J.shR], v[J.shL]).normalize();
+    const chestUp = new T.Vector3().subVectors(v[J.neck], v[J.spine]).normalize();
+    const chestFwd = new T.Vector3().crossVectors(chestUp, shSide).normalize();
+    place(S.pelvis, hipM, tA.copy(hipM).add(up), fwd);
+    place(S.belly, hipM, v[J.spine], fwd, NOMINAL.belly);
+    place(S.chest, v[J.spine], v[J.neck], chestFwd, NOMINAL.chest);
+    const headUp = new T.Vector3().subVectors(v[J.head], v[J.neck]).normalize();
+    place(S.neck, v[J.neck], v[J.head], chestFwd);
+    place(S.head, v[J.head], tA.copy(v[J.head]).add(headUp), chestFwd);
+    for (const s of ['L', 'R']) {
+      const hp = v[J['hip' + s]], kn = v[J['knee' + s]], an = v[J['ank' + s]], to = v[J['toe' + s]], sh = v[J['sh' + s]], el = v[J['elb' + s]], hd = v[J['hand' + s]];
+      // knee / elbow point outward from the limb's bend (the side the cap or pad sits on)
+      const kneeOut = tA.addVectors(hp, an).multiplyScalar(0.5); kneeOut.subVectors(kn, kneeOut); if (kneeOut.lengthSq() < 1e-6) kneeOut.copy(fwd); kneeOut.normalize();
+      const kO = kneeOut.clone();
+      place(S['thigh' + s], hp, kn, kO, NOMINAL.thigh);
+      place(S['shin' + s], kn, an, kO, NOMINAL.shin);
+      place(S['knee' + s], kn, an, kO);
+      const footUp = tB.subVectors(kn, an).normalize().clone();
+      place(S['foot' + s], an, to, footUp);
+      const elOut = tA.addVectors(sh, hd).multiplyScalar(0.5); elOut.subVectors(el, elOut); if (elOut.lengthSq() < 1e-6) elOut.copy(up).negate(); elOut.normalize();
+      const eO = elOut.clone();
+      place(S['shoulder' + s], sh, el, chestFwd);
+      place(S['upper' + s], sh, el, eO.clone().negate(), NOMINAL.upper);
+      place(S['elbow' + s], el, hd, eO);
+      place(S['fore' + s], el, hd, chestUp, NOMINAL.fore);
+      place(S['hand' + s], hd, tB.copy(hd).add(tA.subVectors(hd, el).normalize()), chestUp);
     }
   }
 }
