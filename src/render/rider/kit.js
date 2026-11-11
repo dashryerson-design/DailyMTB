@@ -10,7 +10,9 @@ export const mix = (a, b, t) => a.map((v, i) => v + (b[i] - v) * t);
 
 // rings: [[t, rx, rz, ox?, oz?], ...] (t along Y in units of L, rx = half depth front/back, rz = half width)
 // color(t, a, p) -> sRGB, disp(t, a) -> radial offset (m). Ends are closed with a pole.
+export const LOWPOLY = { on: false };   // set while building the low-poly rider: coarse rings, few sides
 export function tube(rings, L, { n = 14, step = 0.03, color = () => [1, 1, 1], disp = () => 0 } = {}) {
+  if (LOWPOLY.on) { n = Math.max(6, Math.round(n / 2)); step = 0.1; const d0 = disp; disp = (t, a) => 0.3 * d0(t, a); }
   // resample the profile finely (smooth silhouette + crisp colour panels)
   const fine = []; for (let r = 0; r < rings.length - 1; r++) { const A = rings[r], B = rings[r + 1], k = Math.max(1, Math.ceil((B[0] - A[0]) / step));
     for (let j = 0; j < k; j++) { const u = j / k, sm = u * u * (3 - 2 * u); fine.push(A.map((v, i) => i === 0 ? v + ((B[i] ?? 0) - v) * u : (v ?? 0) + ((B[i] ?? 0) - (v ?? 0)) * sm)); } }

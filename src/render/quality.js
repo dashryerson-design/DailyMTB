@@ -35,3 +35,19 @@ export function styleModel(root) {
     const u = m.userData; if (!('bump' in u)) { u.bump = m.bumpMap || null; }
     m.flatShading = lp; m.bumpMap = lp ? null : u.bump; m.needsUpdate = true; } });
 }
+
+// Build models in low-poly form: while fn runs, the curved three.js primitives are created with very few
+// segments (so every tube, wheel, sphere and rounded part becomes clearly faceted). Geometry only;
+// nothing about positions, sizes or physics changes.
+export function buildLowPoly(fn) {
+  const T = window.THREE, orig = {}, clamp = (v, lo, hi) => Math.max(lo, Math.min(hi, v ?? hi));
+  const patch = (name, map) => { orig[name] = T[name]; const O = orig[name]; T[name] = class extends O { constructor(...a) { super(...map(a)); } }; };
+  patch('CylinderGeometry', ([rt, rb, h, rs, hs, ...r]) => [rt, rb, h, clamp(rs, 3, 6), 1, ...r]);
+  patch('TorusGeometry', ([R, t, rs, ts, arc]) => [R, t, clamp(rs, 3, 4), clamp(ts, 6, 12), arc]);
+  patch('TubeGeometry', ([path, ts, r, rs, closed]) => [path, Math.max(2, Math.round((ts ?? 64) / 4)), r, clamp(rs, 3, 4), closed]);
+  patch('SphereGeometry', ([r, w, h, ...rest]) => [r, clamp(w, 4, 9), clamp(h, 2, 6), ...rest]);
+  patch('RingGeometry', ([a, b, s, ...rest]) => [a, b, clamp(s, 3, 10), ...rest]);
+  patch('IcosahedronGeometry', ([r]) => [r, 0]);
+  patch('ConeGeometry', ([r, h, rs, ...rest]) => [r, h, clamp(rs, 3, 6), ...rest]);
+  try { return fn(); } finally { Object.assign(T, orig); }
+}

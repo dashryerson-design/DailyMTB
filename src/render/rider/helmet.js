@@ -2,7 +2,7 @@
 // Y = up, Z = right). Layered: glossy shell with graphics and rubber edge trim, EPS liner showing at the
 // openings, integrated chin bar with vent grille, adjustable peaked visor on side screws, vents across
 // the shell, goggles with mirrored lens + strap, cheek-pad release tabs.
-import { tube, paint, solid, mats, mesh, mix, hex, nz } from './kit.js';
+import { tube, paint, solid, mats, mesh, mix, hex, nz, LOWPOLY } from './kit.js';
 const T = window.THREE;
 
 // keep only the triangles whose centroid passes keep(x, y, z) (on the unit sphere)
@@ -33,7 +33,7 @@ export function fullFaceHelmet(o = {}) {
   const C = { shell: hex(o.shell ?? 0xf2f3f5), accent: hex(o.accent ?? 0xf26b1d), dark: hex(o.dark ?? 0x1c1e22), trim: hex(0x0f1012), liner: hex(0x2a2c30), visor: hex(o.visor ?? 0x1c1e22), lens: hex(o.lens ?? 0xe0902a), strap: hex(o.strap ?? 0xf26b1d) };
   const M = mats(), g = new T.Group();
   // ---- shell (outer) with graphics: centre stripe, side swoosh, dark rubber trim along every edge
-  const sh = carve(new T.SphereGeometry(1, 60, 44), (x, y, z) => !isOpen(x, y, z));
+  const sh = carve(new T.SphereGeometry(1, LOWPOLY.on ? 20 : 60, LOWPOLY.on ? 14 : 44), (x, y, z) => !isOpen(x, y, z));
   const sp = sh.attributes.position, unit = new Float32Array(sp.array);
   for (let i = 0; i < sp.count; i++) sp.setXYZ(i, ...shellPoint(sp.getX(i), sp.getY(i), sp.getZ(i)));
   sh.computeVertexNormals();
@@ -52,7 +52,7 @@ export function fullFaceHelmet(o = {}) {
   });
   mesh(sh, M.shell, g);
   // ---- EPS liner just inside (seen at the openings: gives the shell real thickness)
-  const ln = carve(new T.SphereGeometry(1, 30, 20), (x, y, z) => !isOpen(x, y, z));
+  const ln = carve(new T.SphereGeometry(1, LOWPOLY.on ? 10 : 30, LOWPOLY.on ? 8 : 20), (x, y, z) => !isOpen(x, y, z));
   const lp = ln.attributes.position; for (let i = 0; i < lp.count; i++) lp.setXYZ(i, ...shellPoint(lp.getX(i), lp.getY(i), lp.getZ(i), 0.88));
   ln.computeVertexNormals(); mesh(solid(ln, C.liner), M.foam, g, false);
   // chin vent grille: three horizontal slots across the front of the bar + mesh behind

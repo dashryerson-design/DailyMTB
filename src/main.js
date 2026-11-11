@@ -7,7 +7,8 @@ import { RiderModel } from './render/riderModel.js';
 import { buildWorld, envMap } from './render/world.js';
 import { CameraRig, CAM_MODES } from './render/camera.js';
 import { Sound } from './game/sound.js';
-import { Q as GFX, setQuality, applyRenderer, applySun, setStyle, styleModel } from './render/quality.js';
+import { Q as GFX, setQuality, applyRenderer, applySun, setStyle, styleModel, buildLowPoly } from './render/quality.js';
+import { LOWPOLY } from './render/rider/kit.js';
 import { Dust } from './render/dust.js';
 import { Input } from './game/input.js';
 const T = window.THREE;
@@ -24,11 +25,20 @@ renderer.outputEncoding = T.sRGBEncoding; renderer.toneMapping = T.ACESFilmicTon
 renderer.shadowMap.enabled = true; renderer.shadowMap.type = T.PCFSoftShadowMap; applyRenderer(renderer);
 const scene = new T.Scene(), cam = new T.PerspectiveCamera(62, 1, 0.05, 700);
 scene.environment = envMap(renderer);
-const dust = new Dust(scene), model = new BikeModel(scene), riderModel = new RiderModel(scene), input = new Input();
-// ghost of the best run on this track: translucent copies of the bike + rider
-const ghost = { bike: new BikeModel(scene), rider: new RiderModel(scene) };
-for (const o of [ghost.bike.root, ghost.rider.group]) o.traverse(m => { if (m.material) { m.material = m.material.clone(); Object.assign(m.material, { transparent: true, opacity: 0.32, depthWrite: false }); m.castShadow = false; } });
-const showGhost = (v) => { ghost.bike.root.visible = ghost.rider.group.visible = v; }; showGhost(false);
+const dust = new Dust(scene), input = new Input();
+// bike + rider models (and the ghost: translucent copies). Rebuilt when the visual style changes:
+// low poly builds the same parts with very few segments. Purely visual - the physics never sees these.
+let model, riderModel, ghost;
+function buildModels() {
+  for (const o of [model && model.root, riderModel && riderModel.group, ghost && ghost.bike.root, ghost && ghost.rider.group]) if (o) { scene.remove(o); o.traverse((m) => m.geometry && m.geometry.dispose()); }
+  const lp = GFX.style === 'lowpoly', make = () => { LOWPOLY.on = lp; try { return [new BikeModel(scene), new RiderModel(scene), new BikeModel(scene), new RiderModel(scene)]; } finally { LOWPOLY.on = false; } };
+  const [b, rr, gb, gr] = lp ? buildLowPoly(make) : make();
+  model = b; riderModel = rr; ghost = { bike: gb, rider: gr };
+  for (const o of [ghost.bike.root, ghost.rider.group]) o.traverse(m => { if (m.material) { m.material = m.material.clone(); Object.assign(m.material, { transparent: true, opacity: 0.32, depthWrite: false }); m.castShadow = false; } });
+  showGhost(false);
+}
+const showGhost = (v) => { if (ghost) ghost.bike.root.visible = ghost.rider.group.visible = v; };
+buildModels();
 const resize = () => { const w = innerWidth, h = innerHeight; renderer.setSize(w, h, false); cam.aspect = w / h; cam.updateProjectionMatrix(); };
 addEventListener('resize', resize); resize();
 
@@ -103,7 +113,7 @@ qualLabel();
 // visual style: REAL or LOW POLY (models restyle now; the world uses it from the next track)
 const restyle = () => { for (const o of [model.root, riderModel.group, ghost.bike.root, ghost.rider.group]) styleModel(o); };
 const styleLabel = () => document.querySelectorAll('.styleSel button').forEach(b => b.classList.toggle('on', b.dataset.s === GFX.style));
-document.querySelectorAll('.styleSel button').forEach(b => b.onclick = () => { setStyle(b.dataset.s); restyle(); styleLabel(); });
+document.querySelectorAll('.styleSel button').forEach(b => b.onclick = () => { if (b.dataset.s === GFX.style) return; setStyle(b.dataset.s); buildModels(); restyle(); styleLabel(); });
 restyle(); styleLabel();
 const muteLabel = () => { $('muteBtn').innerHTML = `<span>${snd.muted ? 'Unmute' : 'Mute'}</span>`; }; muteLabel();
 $('muteBtn').onclick = () => { snd.setMuted(!snd.muted); muteLabel(); };
