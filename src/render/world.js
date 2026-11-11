@@ -73,7 +73,10 @@ export function buildWorld(scene0, track) {
   const P = PAL[track.biome] || PAL.forest, COLS = colsFor(P), root = new T.Group(); scene0.add(root);
   const scene = { add: (...o) => root.add(...o) };
   const tex = detailTexture(), noise = makeNoise(21);
-  const terrainMat = new T.MeshStandardMaterial({ vertexColors: true, map: tex, bumpMap: tex, bumpScale: 0.025, roughness: 0.95, metalness: 0 });
+  // ground detail by quality: Low drops the bump relief and texture filtering (flat colour + light grain)
+  const lowG = Q.level === 'low'; tex.anisotropy = { high: 8, medium: 4, low: 1 }[Q.level] || 8;
+  if (lowG) { tex.minFilter = T.LinearMipmapNearestFilter; tex.repeat.set(0.5, 0.5); }
+  const terrainMat = new T.MeshStandardMaterial({ vertexColors: true, map: tex, bumpMap: lowG ? null : tex, bumpScale: 0.025, roughness: 0.95, metalness: 0 });
   const { minX, maxX, minZ, maxZ } = track.bounds, CH = 32;
   // chunks along the trail get a detailed mesh (by quality) plus a coarse one used once the camera is
   // far away; skirts hide the seams where neighbouring chunks differ in detail
@@ -118,7 +121,7 @@ export function buildWorld(scene0, track) {
   const r = rng(77), rockGeo = new T.IcosahedronGeometry(1, 2), pa = rockGeo.attributes.position;
   for (let i = 0; i < pa.count; i++) { const v = new T.Vector3().fromBufferAttribute(pa, i), f = 1 + 0.18 * noise(v.x * 2 + 9, v.z * 2 + v.y); v.multiplyScalar(f); if (v.y < 0) v.y *= 0.6; pa.setXYZ(i, v.x, v.y, v.z); }
   rockGeo.computeVertexNormals();
-  const rockMat = new T.MeshStandardMaterial({ color: new T.Color(P.rock).convertSRGBToLinear(), roughness: 0.88, map: tex, bumpMap: tex, bumpScale: 0.03 });
+  const rockMat = new T.MeshStandardMaterial({ color: new T.Color(P.rock).convertSRGBToLinear(), roughness: 0.88, map: tex, bumpMap: lowG ? null : tex, bumpScale: 0.03 });
   const deco = [];
   for (let i = 0; i < 700; i++) { const x = minX + r() * (maxX - minX), z = minZ + r() * (maxZ - minZ); if (track.trackDist(x, z) < 4 || (track.farDist && track.farDist(x, z) > 60)) continue; const s = 0.2 + r() ** 3 * 1.6; deco.push({ x, z, rr: s, rh: s * (0.5 + r() * 0.4), base: track.h(x, z) - s * 0.15 }); }
   const all = [...track.rocks, ...deco], mm = new T.Matrix4(), q = new T.Quaternion(), chunks = [];
