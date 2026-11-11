@@ -3,7 +3,7 @@
 const PRESETS = {
   high:   { label: 'High',   pixelRatio: 2,    shadows: true,  shadowMap: 2048, shadowDist: 1,   soft: true,  lod: 1,    grass: 1,   tree: 1,    bush: 1 },
   medium: { label: 'Medium', pixelRatio: 1.25, shadows: true,  shadowMap: 1024, shadowDist: 0.5, soft: false, lod: 0.75, grass: 0.6, tree: 0.5,  bush: 0.5 },
-  low:    { label: 'Low',    pixelRatio: 1,    shadows: false, shadowMap: 512,  shadowDist: 0,   soft: false, lod: 0.55, grass: 0.35, tree: 0.35, bush: 0.35 },
+  low:    { label: 'Low',    pixelRatio: 1,    shadows: false, shadowMap: 512,  shadowDist: 0,   soft: false, lod: 0.55, grass: 0,    tree: 0.35, bush: 0 }   // low: trees only, no undergrowth,
 };
 const KEY = 'dailymtb.quality';
 const touch = typeof matchMedia !== 'undefined' && matchMedia('(pointer: coarse)').matches;   // tablets/phones start on Medium
