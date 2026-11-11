@@ -31,8 +31,8 @@ const dust = new Dust(scene), input = new Input();
 let model, riderModel, ghost;
 function buildModels() {
   for (const o of [model && model.root, riderModel && riderModel.group, ghost && ghost.bike.root, ghost && ghost.rider.group]) if (o) { scene.remove(o); o.traverse((m) => m.geometry && m.geometry.dispose()); }
-  const lp = GFX.style === 'lowpoly', make = () => { LOWPOLY.on = lp; try { return [new BikeModel(scene), new RiderModel(scene), new BikeModel(scene), new RiderModel(scene)]; } finally { LOWPOLY.on = false; } };
-  const [b, rr, gb, gr] = lp ? buildLowPoly(make) : make();
+  const lp = GFX.style === 'lowpoly', make = () => { LOWPOLY.on = false; try { return [new BikeModel(scene), new RiderModel(scene), new BikeModel(scene), new RiderModel(scene)]; } finally { LOWPOLY.on = false; } };
+  const [b, rr, gb, gr] = make();   // full-detail models in both styles (cartoon look comes from materials)
   model = b; riderModel = rr; ghost = { bike: gb, rider: gr };
   for (const o of [ghost.bike.root, ghost.rider.group]) o.traverse(m => { if (m.material) { m.material = m.material.clone(); Object.assign(m.material, { transparent: true, opacity: 0.32, depthWrite: false }); m.castShadow = false; } });
   showGhost(false);

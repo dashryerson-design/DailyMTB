@@ -28,14 +28,57 @@ export function applySun(sun) {
 const SKEY = 'dailymtb.style';
 try { Q.style = localStorage.getItem(SKEY) === 'lowpoly' ? 'lowpoly' : 'real'; } catch { Q.style = 'real'; }
 export function setStyle(st) { Q.style = st === 'lowpoly' ? 'lowpoly' : 'real'; try { localStorage.setItem(SKEY, Q.style); } catch {} }
-// restyle already-built models (bike, rider, ghost): faceted shading, bump/texture detail off in low poly
-export function styleModel(root) {
-  const lp = Q.style === 'lowpoly';
-  root.traverse((o) => { if (!o.material) return; for (const m of [].concat(o.material)) {
-    const u = m.userData; if (!('bump' in u)) { u.bump = m.bumpMap || null; }
-    m.flatShading = lp; m.bumpMap = lp ? null : u.bump; m.needsUpdate = true; } });
+// ---- cartoon ("low poly") look helpers
+let _grad = null;
+export function toonGradient() {   // 3-band cel shading ramp
+  if (_grad) return _grad; const T = window.THREE, d = new Uint8Array([90, 170, 255]);
+  _grad = new T.DataTexture(d, 3, 1, T.LuminanceFormat); _grad.minFilter = _grad.magFilter = T.NearestFilter; _grad.generateMipmaps = false; _grad.needsUpdate = true; return _grad;
 }
-
+export function toonMat(o = {}) { const T = window.THREE; return new T.MeshToonMaterial({ gradientMap: toonGradient(), ...o }); }
+// flat-colour facets: every triangle gets one colour (its average), pushed brighter/more saturated and
+// stepped into a few tones, and a face normal - crisp cartoon facets instead of smeared gradients
+export function facetize(g, { sat = 1.3, gain = 1.12, steps = 7 } = {}) {
+  const T = window.THREE; if (g.index) g = g.toNonIndexed();
+  const c = g.attributes.color; if (c) { const col = new T.Color(), hsl = {};
+    for (let i = 0; i < c.count; i += 3) {
+      let r = 0, gg = 0, b = 0; for (let k = 0; k < 3; k++) { r += c.getX(i + k); gg += c.getY(i + k); b += c.getZ(i + k); }
+      col.setRGB(r / 3, gg / 3, b / 3).convertLinearToSRGB().getHSL(hsl);
+      const l = Math.round(Math.min(1, hsl.l * gain) * steps) / steps;
+      col.setHSL(hsl.h, Math.min(1, hsl.s * sat), Math.max(0.04, l)).convertSRGBToLinear();
+      for (let k = 0; k < 3; k++) c.setXYZ(i + k, col.r, col.g, col.b);
+    } c.needsUpdate = true; }
+  g.computeVertexNormals(); return g;
+}
+// restyle the bike / rider / ghost: cel-shaded flat colours plus an ink outline in cartoon mode,
+// the original physically-based materials in real mode. Geometry stays full detail.
+export function styleModel(root) {
+  const T = window.THREE, lp = Q.style === 'lowpoly', ghost = (m) => m.transparent && m.opacity < 1;
+  root.traverse((o) => {
+    if (o.userData.outline) return;
+    if (o.isMesh && o.material && !Array.isArray(o.material)) {
+      const u = o.userData;
+      if (!u.real) u.real = o.material;
+      if (lp) {
+        const r = u.real;
+        if (!u.toon) u.toon = toonMat({ color: r.color ? r.color.clone() : new T.Color(1, 1, 1), vertexColors: !!r.vertexColors, transparent: r.transparent, opacity: r.opacity, depthWrite: r.depthWrite, side: r.side });
+        o.material = u.toon;
+        // ink outline: back faces pushed out along the normals (skip tiny parts and ghosts)
+        if (!o.geometry.boundingSphere) o.geometry.computeBoundingSphere();
+        if (!u.ol && !o.isInstancedMesh && !ghost(r) && o.geometry.boundingSphere.radius > 0.03) {
+          const ol = new T.Mesh(o.geometry, outlineMat()); ol.userData.outline = true; ol.castShadow = false; ol.raycast = () => {}; o.add(ol); u.ol = ol;
+        }
+        if (u.ol) u.ol.visible = true;
+      } else { o.material = u.real; if (u.ol) u.ol.visible = false; }
+    }
+  });
+}
+let _ol = null;
+function outlineMat() {
+  if (_ol) return _ol; const T = window.THREE;
+  _ol = new T.MeshBasicMaterial({ color: 0x14161a, side: T.BackSide });
+  _ol.onBeforeCompile = (sh) => { sh.vertexShader = sh.vertexShader.replace('#include <begin_vertex>', 'vec3 transformed = position + normalize(normal) * 0.007;'); };
+  return _ol;
+}
 // Build models in low-poly form: while fn runs, the curved three.js primitives are created with very few
 // segments (so every tube, wheel, sphere and rounded part becomes clearly faceted). Geometry only;
 // nothing about positions, sizes or physics changes.
