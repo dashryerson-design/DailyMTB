@@ -1,6 +1,6 @@
 // Terrain meshes (chunked, high-res near the trail), rocks, roots, vegetation, lighting, sky.
 import { SURF, rng, makeNoise } from '../terrain/track.js';
-import { pineGeo, pineMaterial, trunkGeo, cactusGeo, bushGeo, grassGeo, grassMaterial } from './flora.js';
+import { pineGeo, pineFarGeo, pineMaterial, trunkGeo, cactusGeo, bushGeo, grassGeo, grassMaterial } from './flora.js';
 const T = window.THREE;
 
 function detailTexture() {
@@ -11,6 +11,48 @@ function detailTexture() {
     v = Math.max(0, Math.min(1, v)) * 255; const i = (x + y * 256) * 4; img.data[i] = img.data[i + 1] = img.data[i + 2] = v; img.data[i + 3] = 255;
   }
   g.putImageData(img, 0, 0); const t = new T.CanvasTexture(c); t.wrapS = t.wrapT = T.RepeatWrapping; t.anisotropy = 8; return t;
+}
+
+// Spatially chunked instancing with distance LOD and view culling. Every object is put in a grid cell;
+// each cell gets one InstancedMesh per layer (e.g. detailed tree / cheap far tree). Per frame a cell's
+// layer is shown only if the cell is inside its distance band and inside the camera view (with a
+// generous margin, and always when close enough to throw shadows into view), so nothing visibly pops.
+const _fr = new T.Frustum(), _pm = new T.Matrix4(), _sph = new T.Sphere(), ZERO = new T.Matrix4().makeScale(0, 0, 0);
+class Chunks {
+  // layers: [{ geo, mat, depth?, near, far, shadow }]  near/far = camera distance band (m), shadow = cast within (m)
+  constructor(parent, layers, cell = 48) { this.parent = parent; this.layers = layers; this.cell = cell; this.cells = new Map(); this.items = []; }
+  add(x, y, z, mats, color) {   // mats[l] = Matrix4 for layer l (or null)
+    const k = Math.floor(x / this.cell) + ',' + Math.floor(z / this.cell);
+    let c = this.cells.get(k); if (!c) this.cells.set(k, c = { list: [], x0: Math.floor(x / this.cell) * this.cell, z0: Math.floor(z / this.cell) * this.cell, ymin: 1e9, ymax: -1e9 });
+    c.ymin = Math.min(c.ymin, y); c.ymax = Math.max(c.ymax, y);
+    const it = { c, mats, color, slot: [] }; c.list.push(it); this.items.push(it); return this.items.length - 1;
+  }
+  build() {
+    for (const c of this.cells.values()) {
+      c.mesh = this.layers.map((L, l) => {
+        const its = c.list.filter((it) => it.mats[l]); if (!its.length) return null;
+        const m = new T.InstancedMesh(L.geo, L.mat, its.length); m.frustumCulled = false; m.receiveShadow = !!L.receive; m.castShadow = false;
+        if (L.depth) m.customDepthMaterial = L.depth;
+        its.forEach((it, i) => { m.setMatrixAt(i, it.mats[l]); it.slot[l] = i; if (it.color && m.setColorAt) m.setColorAt(i, it.color); });
+        m.visible = false; this.parent.add(m); return m;
+      });
+      const h = this.cell / 2; c.cx = c.x0 + h; c.cz = c.z0 + h; c.cy = (c.ymin + c.ymax) / 2 + 4; c.rad = h * 1.42 + (c.ymax - c.ymin) / 2 + 10;
+    }
+  }
+  update(cam) {
+    cam.updateMatrixWorld(); _pm.multiplyMatrices(cam.projectionMatrix, cam.matrixWorldInverse); _fr.setFromProjectionMatrix(_pm);
+    const p = cam.position;
+    for (const c of this.cells.values()) {
+      const dx = Math.max(0, Math.abs(p.x - c.cx) - this.cell / 2), dz = Math.max(0, Math.abs(p.z - c.cz) - this.cell / 2), d = Math.hypot(dx, dz);
+      _sph.center.set(c.cx, c.cy, c.cz); _sph.radius = c.rad;
+      const inView = d < 30 || _fr.intersectsSphere(_sph);   // close cells always (their shadows can fall into view)
+      c.mesh.forEach((m, l) => { if (!m) return; const L = this.layers[l]; m.visible = inView && d >= L.near && d < L.far; m.castShadow = m.visible && d < (L.shadow || 0); });
+    }
+  }
+  hide(id, on, layers) {   // tuck one object away (or restore it) in the given layers
+    const it = this.items[id];
+    for (const l of layers) { const m = it.c.mesh[l]; if (!m) continue; m.setMatrixAt(it.slot[l], on ? ZERO : it.mats[l]); m.instanceMatrix.needsUpdate = true; }
+  }
 }
 
 // per-biome look: ground colours, rocks, sky/fog, vegetation
@@ -71,9 +113,11 @@ export function buildWorld(scene0, track) {
   const rockMat = new T.MeshStandardMaterial({ color: new T.Color(P.rock).convertSRGBToLinear(), roughness: 0.88, map: tex, bumpMap: tex, bumpScale: 0.03 });
   const deco = [];
   for (let i = 0; i < 700; i++) { const x = minX + r() * (maxX - minX), z = minZ + r() * (maxZ - minZ); if (track.trackDist(x, z) < 4 || (track.farDist && track.farDist(x, z) > 60)) continue; const s = 0.2 + r() ** 3 * 1.6; deco.push({ x, z, rr: s, rh: s * (0.5 + r() * 0.4), base: track.h(x, z) - s * 0.15 }); }
-  const all = [...track.rocks, ...deco], rocks = new T.InstancedMesh(rockGeo, rockMat, all.length), mm = new T.Matrix4(), q = new T.Quaternion();
-  all.forEach((rk, i) => { q.setFromAxisAngle(new T.Vector3(0, 1, 0), r() * 6.28); rocks.setMatrixAt(i, mm.compose(new T.Vector3(rk.x, rk.base, rk.z), q, new T.Vector3(rk.rr, rk.rh, rk.rr * (0.8 + r() * 0.3)))); });
-  rocks.castShadow = rocks.receiveShadow = true; scene.add(rocks);
+  const all = [...track.rocks, ...deco], mm = new T.Matrix4(), q = new T.Quaternion(), chunks = [];
+  const rockFar = new T.IcosahedronGeometry(1, 0); rockFar.scale(1, 0.75, 1);
+  const rocks = new Chunks(root, [{ geo: rockGeo, mat: rockMat, near: 0, far: 70, shadow: 35, receive: true }, { geo: rockFar, mat: rockMat, near: 70, far: 400 }]); chunks.push(rocks);
+  all.forEach((rk) => { q.setFromAxisAngle(new T.Vector3(0, 1, 0), r() * 6.28); const M = new T.Matrix4().compose(new T.Vector3(rk.x, rk.base, rk.z), q, new T.Vector3(rk.rr, rk.rh, rk.rr * (0.8 + r() * 0.3))); rocks.add(rk.x, rk.base, rk.z, [M, M]); });
+  rocks.build();
   // roots
   const rootMat = new T.MeshStandardMaterial({ color: new T.Color(0x4a3220).convertSRGBToLinear(), roughness: 0.8 });
   for (const rt of track.roots) {
@@ -93,11 +137,18 @@ export function buildWorld(scene0, track) {
     trees.push([p.x, p.z, 0.6 + r() * 0.8]);
   }
   for (let i = 0; i < P.trees * 6 && trees.length < P.trees + 800 * dens; i++) { const x = minX + r() * (maxX - minX), z = minZ + r() * (maxZ - minZ); if (track.trackDist(x, z) < 5.5 || (track.farDist && track.farDist(x, z) > 65)) continue; trees.push([x, z, 0.7 + r() * 0.8]); }
-  const trunks = new T.InstancedMesh(trunkG, new T.MeshStandardMaterial({ vertexColors: true, roughness: 0.95, map: tex, bumpMap: tex, bumpScale: 0.02 }), trees.length);
-  const fol = new T.InstancedMesh(folG, cactus ? new T.MeshStandardMaterial({ vertexColors: true, color: 0xffffff, roughness: 0.9 }) : pineMaterial(P.treeKind === 'snowpine'), trees.length);
-  if (fol.material.depth) fol.customDepthMaterial = fol.material.depth;
-  trees.forEach(([x, z, s], i) => { const y = track.h(x, z); q.setFromAxisAngle(new T.Vector3(0, 1, 0), r() * 6.28); trunks.setMatrixAt(i, mm.compose(new T.Vector3(x, y, z), q, new T.Vector3(s, (cactus ? 3.2 : 7.2) * s, s))); fol.setMatrixAt(i, mm.compose(new T.Vector3(x, y, z), q, new T.Vector3(s, s, s))); fol.setColorAt && fol.setColorAt(i, new T.Color(0.85 + r() * 0.25, 0.85 + r() * 0.25, 0.8 + r() * 0.2)); });
-  trunks.castShadow = fol.castShadow = true; fol.receiveShadow = true; scene.add(trunks, fol);
+  // detailed trees up close (with shadows), a cheap stand-in beyond ~75 m (already deep in the haze)
+  const folMat = cactus ? new T.MeshStandardMaterial({ vertexColors: true, color: 0xffffff, roughness: 0.9 }) : pineMaterial(P.treeKind === 'snowpine');
+  const farMat = new T.MeshStandardMaterial({ vertexColors: true, color: 0xffffff, roughness: 0.95 });
+  const TREE_NEAR = 75, treeCh = new Chunks(root, [
+    { geo: folG, mat: folMat, depth: folMat.depth, near: 0, far: TREE_NEAR, shadow: 40, receive: true },
+    { geo: trunkG, mat: new T.MeshStandardMaterial({ vertexColors: true, roughness: 0.95, map: tex, bumpMap: tex, bumpScale: 0.02 }), near: 0, far: TREE_NEAR, shadow: 40 },
+    { geo: cactus ? folG : pineFarGeo(P.treeKind === 'snowpine'), mat: cactus ? folMat : farMat, near: TREE_NEAR, far: 600 },
+  ]); chunks.push(treeCh);
+  const treeId = trees.map(([x, z, s]) => { const y = track.h(x, z); q.setFromAxisAngle(new T.Vector3(0, 1, 0), r() * 6.28);
+    const F = new T.Matrix4().compose(new T.Vector3(x, y, z), q, new T.Vector3(s, s, s)), Tr = cactus ? null : new T.Matrix4().compose(new T.Vector3(x, y, z), q, new T.Vector3(s, 7.2 * s, s));
+    return treeCh.add(x, y, z, [F, Tr, F], new T.Color(0.85 + r() * 0.25, 0.85 + r() * 0.25, 0.8 + r() * 0.2)); });
+  treeCh.build();
   const bushG = bushGeo(track.biome === 'test' ? 'forest' : track.biome), bushes = [];
   for (let sv = 0; sv < track.total; sv += 1.6) for (const sd of [-1, 1]) {      // low undergrowth along the trail edge
     if (r() > 0.5) continue;
@@ -105,9 +156,9 @@ export function buildWorld(scene0, track) {
     bushes.push([p.x, p.z, 0.25 + r() * 0.4]);
   }
   for (let i = 0; i < P.bushes * 3 && bushes.length < P.bushes + 900; i++) { const x = minX + r() * (maxX - minX), z = minZ + r() * (maxZ - minZ), d = track.trackDist(x, z); if (d < 2.9 || (d > 9 && r() < 0.6)) continue; bushes.push([x, z, 0.3 + r() * 0.6]); }
-  const bm = new T.InstancedMesh(bushG, new T.MeshStandardMaterial({ vertexColors: true, color: 0xffffff, roughness: 0.92 }), bushes.length);
-  bushes.forEach(([x, z, s], i) => { q.setFromAxisAngle(new T.Vector3(0, 1, 0), r() * 6.28); bm.setMatrixAt(i, mm.compose(new T.Vector3(x, track.h(x, z) - s * 0.08, z), q, new T.Vector3(s * 1.3, s, s * 1.2))); bm.setColorAt && bm.setColorAt(i, new T.Color(0.8 + r() * 0.3, 0.8 + r() * 0.3, 0.78 + r() * 0.22)); });
-  bm.castShadow = bm.receiveShadow = true; scene.add(bm);
+  const bushCh = new Chunks(root, [{ geo: bushG, mat: new T.MeshStandardMaterial({ vertexColors: true, color: 0xffffff, roughness: 0.92 }), near: 0, far: 110, shadow: 30, receive: true }]); chunks.push(bushCh);
+  bushes.forEach(([x, z, s]) => { q.setFromAxisAngle(new T.Vector3(0, 1, 0), r() * 6.28); const y = track.h(x, z) - s * 0.08; bushCh.add(x, y, z, [new T.Matrix4().compose(new T.Vector3(x, y, z), q, new T.Vector3(s * 1.3, s, s * 1.2))], new T.Color(0.8 + r() * 0.3, 0.8 + r() * 0.3, 0.78 + r() * 0.22)); });
+  bushCh.build();
   // grass tufts: lush in the forest, sparse dry clumps in the desert, none on snow
   const gN = { forest: 7000, test: 7000, desert: 1800 }[track.biome] || 0;
   if (gN) {
@@ -116,10 +167,11 @@ export function buildWorld(scene0, track) {
       const sv = r() * track.total, p = track.toWorld(sv, (r() < 0.5 ? -1 : 1) * (TW + 0.5 + r() ** 1.6 * 16)), d = track.trackDist(p.x, p.z);
       if (d < TW + 0.4 || track.surface(p.x, p.z) === SURF.ROCK) continue; tufts.push([p.x, p.z, 0.5 + r() * 0.9]);
     }
-    const gm = new T.InstancedMesh(grassGeo(), grassMaterial(), tufts.length);
-    tufts.forEach(([x, z, s], i) => { q.setFromAxisAngle(new T.Vector3(0, 1, 0), r() * 6.28); gm.setMatrixAt(i, mm.compose(new T.Vector3(x, track.h(x, z) - 0.03, z), q, new T.Vector3(s, s * (0.8 + r() * 0.6), s)));
-      const c = dry ? new T.Color().setHSL(0.11 + r() * 0.03, 0.35, 0.42 + r() * 0.12) : new T.Color().setHSL(0.2 + r() * 0.06, 0.45, 0.22 + r() * 0.1); gm.setColorAt(i, c.convertSRGBToLinear()); });
-    gm.receiveShadow = true; scene.add(gm);
+    const grassCh = new Chunks(root, [{ geo: grassGeo(), mat: grassMaterial(), near: 0, far: 50, receive: true }], 32); chunks.push(grassCh);
+    tufts.forEach(([x, z, s]) => { q.setFromAxisAngle(new T.Vector3(0, 1, 0), r() * 6.28); const y = track.h(x, z) - 0.03;
+      const c = dry ? new T.Color().setHSL(0.11 + r() * 0.03, 0.35, 0.42 + r() * 0.12) : new T.Color().setHSL(0.2 + r() * 0.06, 0.45, 0.22 + r() * 0.1);
+      grassCh.add(x, y, z, [new T.Matrix4().compose(new T.Vector3(x, y, z), q, new T.Vector3(s, s * (0.8 + r() * 0.6), s))], c.convertSRGBToLinear()); });
+    grassCh.build();
   }
 
   // sky, fog, lights
@@ -129,15 +181,14 @@ export function buildWorld(scene0, track) {
   Object.assign(sun.shadow.camera, { left: -18, right: 18, top: 18, bottom: -18, near: 1, far: 120 }); sun.shadow.bias = -0.0004; sun.shadow.normalBias = 0.02;
   scene.add(sun, sun.target);
   // trees right next to the camera (it swings wide in tight, tree-lined turns) are tucked away so the view stays clear
-  const hidden = new Set(), zero = new T.Matrix4().makeScale(0, 0, 0), tmpM = new T.Matrix4();
-  const clearView = (c) => {
-    let dirty = false;
+  const hidden = new Set();
+  const clearView = (cam) => {
+    const c = cam.position;
     trees.forEach(([x, z, s], i) => {
       const near = (x - c.x) ** 2 + (z - c.z) ** 2 < (2.6 * s + 1.2) ** 2;
-      if (near && !hidden.has(i)) { hidden.add(i); trunks.setMatrixAt(i, zero); fol.setMatrixAt(i, zero); dirty = true; }
-      else if (!near && hidden.has(i)) { hidden.delete(i); const y = track.h(x, z); trunks.setMatrixAt(i, tmpM.compose(new T.Vector3(x, y, z), new T.Quaternion(), new T.Vector3(s, (cactus ? 3.2 : 7.2) * s, s))); fol.setMatrixAt(i, tmpM.compose(new T.Vector3(x, y, z), new T.Quaternion(), new T.Vector3(s, s, s))); dirty = true; }
+      if (near !== hidden.has(i)) { if (near) hidden.add(i); else hidden.delete(i); treeCh.hide(treeId[i], near, [0, 1]); }
     });
-    if (dirty) { trunks.instanceMatrix.needsUpdate = true; fol.instanceMatrix.needsUpdate = true; }
+    for (const ch of chunks) ch.update(cam);
   };
   return { sun, root, clearView };
 }

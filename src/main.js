@@ -175,7 +175,7 @@ function frame(now) {
     const gr = L.best && mode === 'ride' && L.started ? L.best.rec : null; showGhost(!!gr && L.runT * 30 < gr.length - 1);
     if (gr && ghost.bike.root.visible) { const g = poseAt(gr, L.runT); ghost.bike.update(g.f); ghost.rider.update({ x: g.x }, g.f); }
     let camT = bike; if (!bike.mounted) { camT = Object.create(bike); camT.p = rider.com; camT.v = rider.v[0].mul(0); }
-    L.rig.update(dt, camT); L.clearView(cam.position);
+    L.rig.update(dt, camT); L.clearView(cam);
     L.sun.position.set(bike.p.x + 30, bike.p.y + 60, bike.p.z + 20); L.sun.target.position.set(bike.p.x, bike.p.y, bike.p.z);
     renderer.render(scene, cam);
   }
@@ -211,7 +211,7 @@ function replayFrame(dt) { showGhost(false);
   else { want = f.p.sub(fh.mul(7)).add(new V(0, 7.5, 0)); look = f.p.add(fh.mul(4)); }
   want.y = Math.max(want.y, tr.h(want.x, want.z) + 0.4);
   R.pos = R.pos && R.shot !== 0 ? lv(R.pos, want, Math.min(1, dt * 6)) : want; R.look = R.look && R.pos !== want ? lv(R.look, look, Math.min(1, dt * 8)) : look;
-  cam.position.set(R.pos.x, R.pos.y, R.pos.z); cam.lookAt(R.look.x, R.look.y, R.look.z); L.clearView(cam.position);
+  cam.position.set(R.pos.x, R.pos.y, R.pos.z); cam.lookAt(R.look.x, R.look.y, R.look.z); L.clearView(cam);
   L.sun.position.set(f.p.x + 30, f.p.y + 60, f.p.z + 20); L.sun.target.position.set(f.p.x, f.p.y, f.p.z);
 }
 const CAUSE = { head: 'head hit the ground', torso: 'body hit the ground', 'upside down': 'bike tipped over' };

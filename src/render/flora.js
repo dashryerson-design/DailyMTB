@@ -60,7 +60,7 @@ export function pineGeo(snowy, seed = 0) {
     for (let b = 0; b < n; b++) {
       const a = (b / n) * Math.PI * 2 + k * 2.39 + seed + (nz(k, b) * 0.5), droop = (0.35 + 0.35 * (1 - u)) * L * 0.45, up = 0.25 * L * (0.3 + u);
       for (const roll of [0, 1.15]) {
-        const c = new T.PlaneGeometry(L, L * 0.62, 4, 1); c.translate(L / 2, 0, 0); c.rotateX(Math.PI / 2 + roll * (b % 2 ? 1 : -1));
+        const c = new T.PlaneGeometry(L, L * 0.62, 2, 1); c.translate(L / 2, 0, 0); c.rotateX(Math.PI / 2 + roll * (b % 2 ? 1 : -1));
         displace(c, (x, y, z) => { const t = x / L; return [x, y + up * t - droop * t * t, z]; });   // rises from the trunk, tips droop
         c.rotateY(a); c.translate(0, y0, 0);
         parts.push(paint(c, (x, y, z) => { const t = Math.min(1, Math.hypot(x, z) / L); const v = 0.45 + 0.55 * t * (0.75 + 0.25 * u); return [v, v, v * 0.95]; }));
@@ -71,6 +71,17 @@ export function pineGeo(snowy, seed = 0) {
   const core = new T.ConeGeometry(0.9, H - 1.2, 10, 1, true); core.translate(0, 1.2 + (H - 1.2) / 2, 0);
   const cg = paint(core, () => [0.06, 0.09, 0.05]); cg.setAttribute('uv', new T.BufferAttribute(new Float32Array(cg.attributes.position.count * 2).fill(0.02), 2)); parts.push(cg);
   return mergeUV(parts);
+}
+// distant stand-in: a few lumpy, drooping tiers (~100 triangles) coloured like the near tree seen through haze
+export function pineFarGeo(snowy) {
+  const parts = [];
+  for (let k = 0; k < 4; k++) {
+    const u = k / 3, rad = 2.5 * (1 - u * 0.8) + 0.2, h = 2.4 - 0.5 * u, y0 = 1.2 + u * 4.9;
+    const c = new T.ConeGeometry(rad, h, 8, 1, true); c.translate(0, y0 + h / 2, 0);
+    displace(c, (x, y, z) => { const a = Math.atan2(z, x), f = 1 + 0.18 * Math.sin(a * 5 + k); return [x * f, y, z * f]; });
+    parts.push(paint(c, (x, y, z, nx, ny) => { let col = mix([0.07, 0.12, 0.06], [0.15, 0.24, 0.11], Math.min(1, Math.hypot(x, z) / rad)); if (snowy && ny > 0.3) col = mix(col, [0.85, 0.88, 0.93], 0.55); return col; }));
+  }
+  return merge(parts);
 }
 // merge keeping uvs (for textured cards)
 function mergeUV(parts) {
