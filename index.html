@@ -2,88 +2,146 @@
 <title>DailyMTB</title>
 <meta name="claude:viewport-fit-sides" content="cover">
 <style>
-/* full-bleed 3D view; HUD panels pinned to the corners */
-:root { --ink: #eef2ec; --dim: #a9b4a8; --panel: rgba(14, 20, 16, 0.72); --fork: #e3b448; --shock: #e8661c; --warn: #f0b429; --bad: #ff5a4f;
-  --mono: "JetBrains Mono", ui-monospace, Menlo, monospace; --sans: "Barlow", system-ui, sans-serif; color-scheme: dark; }
+/* ===== DailyMTB UI — dark gunmetal surfaces, one restrained electric-blue accent, condensed sports type */
+:root { color-scheme: dark;
+  --bg0: #07090b; --bg1: #0d1114; --bg2: #141a1f; --metal: #1c242b; --line: rgba(190, 215, 235, 0.12); --line2: rgba(190, 215, 235, 0.22);
+  --ink: #e9eef2; --dim: #8e9aa4; --faint: #5d6a74; --accent: #2ea8ff; --accent2: #7cc8ff; --accentDeep: #0b6fd1;
+  --panel: rgba(12, 16, 20, 0.78); --fork: #e3b448; --shock: #2ea8ff; --warn: #f0b429; --bad: #ff4d5e;
+  --mono: "JetBrains Mono", ui-monospace, Menlo, monospace; --sans: "Barlow", system-ui, sans-serif; --display: "Barlow Condensed", "Barlow", system-ui, sans-serif;
+  --ease: cubic-bezier(.2, .8, .2, 1); --t: 180ms; }
 [hidden] { display: none !important; }
-html, body { height: 100%; margin: 0; background: #0d120f; color: var(--ink); overflow: hidden; font: 13px/1.35 var(--sans); }
+html, body { height: 100%; margin: 0; background: var(--bg0); color: var(--ink); overflow: hidden; font: 13px/1.35 var(--sans); -webkit-font-smoothing: antialiased; }
 canvas#view { position: fixed; inset: 0; width: 100%; height: 100%; display: block; }
-.panel { position: fixed; background: var(--panel); backdrop-filter: blur(6px); border-radius: 6px; padding: 10px 12px; }
-#stats { top: calc(12px + env(safe-area-inset-top, 0px)); left: max(12px, env(safe-area-inset-left, 0px)); width: 280px; display: grid; gap: 4px; }
-.big { font: 600 34px/1 var(--mono); letter-spacing: -0.02em; } .big small { font-size: 13px; color: var(--dim); }
-.row { display: flex; align-items: center; gap: 8px; font-variant-numeric: tabular-nums; } .row span { color: var(--dim); min-width: 74px; } .row b { font: 500 12px var(--mono); margin-left: auto; }
+kbd { font: 500 10.5px var(--mono); background: rgba(255,255,255,0.08); border: 1px solid var(--line); border-bottom-width: 2px; border-radius: 3px; padding: 0 4px; color: var(--ink); }
+
+/* ---- buttons: sharp, slightly skewed sports plates */
+.btn { --h: 52px; position: relative; display: inline-flex; align-items: center; justify-content: center; gap: 10px; height: var(--h); padding: 0 34px;
+  font: 700 19px/1 var(--display); letter-spacing: 0.16em; text-transform: uppercase; color: #fff; cursor: pointer; border: 0; border-radius: 2px;
+  background: linear-gradient(180deg, #38b0ff, #1186e6); box-shadow: inset 0 1px 0 rgba(255,255,255,0.28), 0 8px 24px -10px rgba(46,168,255,0.7);
+  transform: skewX(-8deg); transition: transform var(--t) var(--ease), filter var(--t) var(--ease), box-shadow var(--t) var(--ease), background var(--t); }
+.btn > * , .btn { } .btn span, .btn b { transform: skewX(8deg); display: inline-block; }
+.btn:hover { filter: brightness(1.1); transform: skewX(-8deg) translateY(-1px); box-shadow: inset 0 1px 0 rgba(255,255,255,0.3), 0 12px 28px -10px rgba(46,168,255,0.85); }
+.btn:active { transform: skewX(-8deg) translateY(1px) scale(0.985); filter: brightness(0.95); transition-duration: 60ms; }
+.btn:focus-visible { outline: 2px solid var(--accent2); outline-offset: 4px; }
+.btn[disabled] { cursor: not-allowed; filter: saturate(0.2) brightness(0.55); box-shadow: none; transform: skewX(-8deg); }
+.btn.ghost { --h: 44px; padding: 0 22px; font-size: 15px; background: rgba(255,255,255,0.03); color: var(--ink); box-shadow: inset 0 0 0 1px var(--line2); }
+.btn.ghost:hover { background: rgba(46,168,255,0.08); box-shadow: inset 0 0 0 1px rgba(46,168,255,0.55); filter: none; }
+.btn.hero { --h: 64px; padding: 0 64px; font-size: 26px; letter-spacing: 0.22em; }
+.btn.hero::after { content: ""; position: absolute; inset: 0; background: linear-gradient(100deg, transparent 30%, rgba(255,255,255,0.28) 50%, transparent 70%); background-size: 250% 100%; background-position: 120% 0; animation: sheen 4.5s var(--ease) 1.2s infinite; pointer-events: none; }
+@keyframes sheen { 0%, 70% { background-position: 120% 0; } 100% { background-position: -120% 0; } }
+
+/* ---- full-screen menus */
+.screen { position: fixed; inset: 0; z-index: 20; display: grid; place-items: center; align-content: center; gap: 30px; overflow-y: auto;
+  padding: max(28px, env(safe-area-inset-top, 0px)) max(18px, env(safe-area-inset-right, 0px)) max(28px, env(safe-area-inset-bottom, 0px)) max(18px, env(safe-area-inset-left, 0px));
+  background: radial-gradient(120% 80% at 50% 115%, rgba(46,168,255,0.10), transparent 60%), radial-gradient(90% 70% at 50% -10%, #1a232b 0%, transparent 60%), linear-gradient(180deg, #0c1014, #07090b);
+  animation: scrIn 260ms var(--ease) both; }
+@keyframes scrIn { from { opacity: 0; } }
+.screen > * { position: relative; animation: up 420ms var(--ease) both; } .screen > *:nth-child(2) { animation-delay: 60ms; } .screen > *:nth-child(3) { animation-delay: 120ms; } .screen > *:nth-child(4) { animation-delay: 180ms; }
+@keyframes up { from { opacity: 0; transform: translateY(14px); } }
+.screen h2 { margin: 0; text-align: center; font: 700 40px/1 var(--display); letter-spacing: 0.12em; text-transform: uppercase; }
+.screen h2 small { display: block; margin-top: 10px; font: 500 11.5px var(--mono); letter-spacing: 0.26em; color: var(--dim); }
+.eyebrow { font: 600 11px var(--mono); letter-spacing: 0.32em; color: var(--accent); text-transform: uppercase; }
+.row2 { display: flex; gap: 14px; align-items: center; justify-content: center; flex-wrap: wrap; }
+
+/* main menu: layered ridgelines (pure CSS/SVG, drifting very slowly) */
+#mainMenu { gap: 44px; }
+#mainMenu .ridges { position: fixed; inset: auto 0 0 0; height: 62vh; pointer-events: none; animation: none; }
+.ridges i { position: absolute; inset: 0; background-repeat: repeat-x; background-position: 0 100%; background-size: 1600px 100%; will-change: transform; }
+.ridges .r1 { opacity: 0.9; background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 1600 600' preserveAspectRatio='none'%3E%3Cpath d='M0 330 L120 250 L210 290 L330 150 L420 230 L520 190 L640 270 L760 120 L850 210 L960 170 L1080 260 L1200 160 L1310 240 L1420 200 L1600 330 L1600 600 L0 600Z' fill='%23121a21'/%3E%3C/svg%3E"); animation: drift 140s linear infinite; }
+.ridges .r2 { background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 1600 600' preserveAspectRatio='none'%3E%3Cpath d='M0 420 L160 340 L300 400 L460 300 L600 380 L760 330 L900 410 L1060 320 L1220 400 L1380 350 L1600 420 L1600 600 L0 600Z' fill='%230d1318'/%3E%3Cpath d='M0 470 C 260 430, 420 520, 700 470 S 1180 420, 1600 470' fill='none' stroke='%232ea8ff' stroke-opacity='.35' stroke-width='2' stroke-dasharray='3 10'/%3E%3C/svg%3E"); animation: drift 90s linear infinite reverse; }
+.ridges .r3 { background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 1600 600' preserveAspectRatio='none'%3E%3Cpath d='M0 520 L200 470 L380 510 L560 455 L760 515 L960 470 L1160 520 L1380 480 L1600 520 L1600 600 L0 600Z' fill='%2307090b'/%3E%3C/svg%3E"); }
+@keyframes drift { to { transform: translateX(-1600px); } }
+.ridges .r1, .ridges .r2 { width: calc(100% + 1600px); }
+.logo { display: grid; justify-items: center; gap: 14px; }
+.logo svg { width: min(620px, 88vw); height: auto; overflow: visible; filter: drop-shadow(0 18px 30px rgba(0,0,0,0.55)); }
+.logo .tag { font: 500 12px var(--mono); letter-spacing: 0.42em; color: var(--dim); text-transform: uppercase; }
+.menuFoot { position: fixed !important; bottom: max(60px, env(safe-area-inset-bottom, 0px)); left: 0; right: 0; text-align: center; font: 500 10.5px var(--mono); letter-spacing: 0.3em; color: var(--faint); }
+
+/* biome select: large previews, selected = crisp accent frame + brighter image, others recede */
+.cards { display: grid; grid-template-columns: repeat(3, minmax(0, 300px)); gap: 16px; }
+.card { position: relative; aspect-ratio: 4 / 5; padding: 0; overflow: hidden; cursor: pointer; text-align: left; color: var(--ink); border: 0; border-radius: 3px; background: var(--bg2);
+  box-shadow: inset 0 0 0 1px var(--line), 0 20px 40px -18px rgba(0,0,0,0.8); transition: transform 240ms var(--ease), box-shadow 240ms var(--ease), filter 240ms var(--ease); }
+.card svg { position: absolute; inset: 0; width: 100%; height: 100%; transition: transform 600ms var(--ease), filter 300ms var(--ease); filter: saturate(0.75) brightness(0.8); }
+.card::after { content: ""; position: absolute; inset: 0; background: linear-gradient(180deg, rgba(7,9,11,0) 40%, rgba(7,9,11,0.92) 100%); pointer-events: none; }
+.card:hover svg { transform: scale(1.04); filter: saturate(0.9) brightness(0.92); }
+.cards:has(.sel) .card:not(.sel) { filter: brightness(0.62) saturate(0.6); }
+.card.sel { transform: translateY(-4px); box-shadow: inset 0 0 0 2px var(--accent), 0 26px 50px -20px rgba(0,0,0,0.9); }
+.card.sel svg { filter: none; transform: scale(1.05); }
+.card .lbl { position: absolute; z-index: 1; left: 0; right: 0; bottom: 0; padding: 20px 20px 18px; display: grid; gap: 6px; }
+.card .lbl b { font: 700 34px/1 var(--display); letter-spacing: 0.14em; }
+.card .lbl span { font-size: 12.5px; color: rgba(233,238,242,0.72); }
+.card .lbl em { font: 600 10px var(--mono); font-style: normal; letter-spacing: 0.24em; color: var(--accent2); }
+.card .tick { position: absolute; z-index: 1; top: 14px; right: 14px; padding: 5px 8px; font: 600 10px var(--mono); letter-spacing: 0.2em; background: var(--accent); color: #fff; opacity: 0; transform: translateY(-6px); transition: 220ms var(--ease); }
+.card .tick::before { content: "SELECTED"; } .card .tick { font-size: 0; } .card .tick::before { font-size: 10px; }
+.card.sel .tick { opacity: 1; transform: none; }
+.card .selbar { position: absolute; z-index: 1; left: 0; bottom: 0; height: 3px; width: 0; background: var(--accent); transition: width 320ms var(--ease); }
+.card.sel .selbar { width: 100%; }
+.genInfo { font: 500 11px var(--mono); letter-spacing: 0.22em; color: var(--dim); text-transform: uppercase; display: flex; align-items: center; gap: 10px; }
+.genInfo i { width: 7px; height: 7px; background: var(--accent); transform: rotate(45deg); }
+
+/* generation screen: the trail draws itself down a ridge, no spinner */
+#loading { position: fixed; inset: 0; z-index: 30; display: grid; place-items: center; align-content: center; gap: 22px; text-align: center;
+  background: radial-gradient(90% 70% at 50% 40%, #131a20, #07090b 70%); transition: opacity 420ms var(--ease); }
+#loading.out { opacity: 0; pointer-events: none; }
+#loading svg { width: min(440px, 80vw); height: auto; }
+#loading .trailPath { stroke-dasharray: 600; stroke-dashoffset: 600; animation: draw 1.6s var(--ease) infinite; }
+@keyframes draw { 60% { stroke-dashoffset: 0; } 100% { stroke-dashoffset: 0; opacity: 0; } }
+#loading .dot { animation: ride 1.6s var(--ease) infinite; offset-path: path('M20 40 C 90 30, 120 90, 200 80 S 330 120, 420 110'); }
+@keyframes ride { from { offset-distance: 0%; } 60% { offset-distance: 100%; } to { offset-distance: 100%; opacity: 0; } }
+#loading h3 { margin: 0; font: 700 30px/1 var(--display); letter-spacing: 0.18em; }
+#loading p { margin: 0; font: 500 11px var(--mono); letter-spacing: 0.3em; color: var(--dim); text-transform: uppercase; }
+#loading .steps { display: flex; gap: 18px; font: 500 10.5px var(--mono); letter-spacing: 0.2em; color: var(--faint); }
+#loading .steps span { animation: step 1.8s ease-in-out infinite; } #loading .steps span:nth-child(2) { animation-delay: .6s; } #loading .steps span:nth-child(3) { animation-delay: 1.2s; }
+@keyframes step { 30% { color: var(--accent2); } }
+
+/* overlays on top of the ride */
+#finish, #pauseMenu { background: rgba(7,9,11,0.72); backdrop-filter: blur(8px); -webkit-backdrop-filter: blur(8px); }
+#finish .time { font: 700 96px/1 var(--display); letter-spacing: 0.04em; color: #fff; text-shadow: 0 0 40px rgba(46,168,255,0.25); }
+#finish .time::after { content: ""; display: block; height: 3px; width: 64px; margin: 16px auto 0; background: var(--accent); }
+.mix { display: grid; gap: 14px; width: min(440px, 90vw); padding: 20px 22px; background: rgba(20,26,31,0.85); box-shadow: inset 0 0 0 1px var(--line); border-radius: 3px; }
+.mix h3 { margin: 0 0 2px; font: 600 11px var(--mono); letter-spacing: 0.3em; color: var(--accent); }
+.mix label { display: grid; grid-template-columns: 128px 1fr 44px; align-items: center; gap: 14px; font: 600 12.5px var(--sans); letter-spacing: 0.06em; text-transform: uppercase; color: var(--ink); }
+.mix label b { text-align: right; font: 500 12px var(--mono); color: var(--dim); }
+input[type=range] { -webkit-appearance: none; appearance: none; width: 100%; height: 3px; background: linear-gradient(90deg, var(--accent), var(--accent)) 0/var(--p, 100%) 100% no-repeat, rgba(255,255,255,0.12); border-radius: 2px; outline: none; }
+input[type=range]::-webkit-slider-thumb { -webkit-appearance: none; width: 14px; height: 14px; background: #fff; border-radius: 1px; transform: rotate(45deg); box-shadow: 0 0 0 3px rgba(46,168,255,0.35); cursor: pointer; }
+input[type=range]::-moz-range-thumb { width: 12px; height: 12px; background: #fff; border: 0; border-radius: 1px; box-shadow: 0 0 0 3px rgba(46,168,255,0.35); cursor: pointer; }
+
+/* ---- gameplay HUD: quiet glass panels, accent only for live values */
+.panel { position: fixed; background: var(--panel); backdrop-filter: blur(8px); -webkit-backdrop-filter: blur(8px); border-radius: 3px; padding: 10px 12px; box-shadow: inset 0 0 0 1px var(--line); }
+#stats { top: calc(12px + env(safe-area-inset-top, 0px)); left: max(12px, env(safe-area-inset-left, 0px)); width: 272px; display: grid; gap: 4px; }
+.big { font: 600 34px/1 var(--display); letter-spacing: 0.02em; } .big small { font: 500 11px var(--mono); color: var(--dim); letter-spacing: 0.12em; }
+.row { display: flex; align-items: center; gap: 8px; font-variant-numeric: tabular-nums; } .row span { color: var(--dim); min-width: 74px; font-size: 12px; } .row b { font: 500 11.5px var(--mono); margin-left: auto; }
 .row span + b + span { margin-left: 10px; min-width: 0; }
-.bar { flex: 1; height: 6px; background: rgba(255,255,255,0.1); border-radius: 3px; overflow: hidden; } .bar i { display: block; height: 100%; background: var(--fork); }
+.bar { flex: 1; height: 4px; background: rgba(255,255,255,0.08); border-radius: 2px; overflow: hidden; } .bar i { display: block; height: 100%; background: var(--fork); }
 .row:nth-child(3) .bar i, .row:nth-child(4) .bar i { background: var(--shock); }
-.flags { display: flex; flex-wrap: wrap; gap: 4px; min-height: 18px; } .flags em { font: 600 11px var(--mono); font-style: normal; padding: 1px 6px; border-radius: 3px; background: rgba(255,255,255,0.12); letter-spacing: 0.04em; }
+.flags { display: flex; flex-wrap: wrap; gap: 4px; min-height: 18px; } .flags em { font: 600 10.5px var(--mono); font-style: normal; padding: 1px 6px; border-radius: 2px; background: rgba(255,255,255,0.1); letter-spacing: 0.06em; }
 .flags em.w { background: var(--warn); color: #1b1300; } .flags em.c { background: var(--bad); color: #fff; }
 .cam { color: var(--dim); font-size: 11px; }
-#help { bottom: calc(12px + env(safe-area-inset-bottom, 0px)); left: max(12px, env(safe-area-inset-left, 0px)); max-width: 300px; font-size: 12px; }
-#help h2 { font: 700 15px var(--sans); margin: 0 0 6px; letter-spacing: 0.06em; text-transform: uppercase; }
+#help { bottom: calc(12px + env(safe-area-inset-bottom, 0px)); left: max(12px, env(safe-area-inset-left, 0px)); max-width: 300px; font-size: 12px; color: #c9d2d9; }
+#help h2 { font: 700 15px var(--display); margin: 0 0 6px; letter-spacing: 0.16em; text-transform: uppercase; color: var(--ink); }
 #help ul { list-style: none; margin: 6px 0 0; padding: 0; columns: 2; color: var(--dim); }
-kbd { font: 500 11px var(--mono); background: rgba(255,255,255,0.14); border-radius: 3px; padding: 0 4px; color: var(--ink); }
 #telemetry { bottom: calc(12px + env(safe-area-inset-bottom, 0px)); right: max(12px, env(safe-area-inset-right, 0px)); }
 #telemetry .lg { display: flex; gap: 12px; font-size: 11px; color: var(--dim); margin-bottom: 4px; } .lg i { display: inline-block; width: 10px; height: 3px; vertical-align: middle; margin-right: 4px; }
 #graph { width: 300px; height: 90px; display: block; }
-#loading { position: fixed; inset: 0; display: grid; place-items: center; align-content: center; gap: 14px; background: radial-gradient(ellipse at 50% 40%, #1c2a22, #0a0f0c 70%); font: 600 15px var(--mono); letter-spacing: 0.14em; z-index: 30; }
-#loading .spin { width: 46px; height: 46px; border-radius: 50%; border: 5px dotted var(--orange); animation: spin 1.1s linear infinite; justify-self: center; }
-@keyframes spin { to { transform: rotate(360deg); } }
-/* ---- menus */
-:root { --orange: #ff6a1a; --cream: #f4efe6; --display: "Barlow Condensed", "Barlow", system-ui, sans-serif; }
-.screen { position: fixed; inset: 0; z-index: 20; display: grid; place-items: center; align-content: center; gap: 28px; padding: 24px max(16px, env(safe-area-inset-right, 0px)) 24px max(16px, env(safe-area-inset-left, 0px));
-  background: radial-gradient(ellipse at 50% 120%, rgba(255,106,26,0.18), transparent 55%), linear-gradient(180deg, #0c1411 0%, #13201a 55%, #0a0f0c 100%); overflow-y: auto; }
-.screen::before { content: ""; position: absolute; inset: auto 0 0 0; height: 46%; pointer-events: none; opacity: 0.55;
-  background: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 1200 400' preserveAspectRatio='none'%3E%3Cpath d='M0 260 L140 150 L230 210 L360 90 L470 190 L560 130 L700 240 L820 120 L930 200 L1040 140 L1200 230 L1200 400 L0 400Z' fill='%23182a20'/%3E%3Cpath d='M0 320 L180 230 L300 290 L430 210 L600 300 L760 220 L900 290 L1060 240 L1200 300 L1200 400 L0 400Z' fill='%230f1a14'/%3E%3C/svg%3E") bottom / 100% 100% no-repeat; }
-.logo { position: relative; display: grid; justify-items: center; gap: 4px; animation: rise .7s cubic-bezier(.2,.8,.2,1) both; }
-.logo svg { width: min(560px, 90vw); height: auto; overflow: visible; }
-.logo .tag { font: 600 13px var(--mono); letter-spacing: 0.32em; color: var(--dim); text-transform: uppercase; }
-@keyframes rise { from { opacity: 0; transform: translateY(18px); } }
-.btn { position: relative; font: 800 italic 30px/1 var(--display); letter-spacing: 0.08em; color: #160a02; background: var(--orange); border: 0; border-radius: 4px; padding: 18px 58px 16px;
-  cursor: pointer; clip-path: polygon(6% 0, 100% 0, 94% 100%, 0 100%); transition: transform .15s ease, filter .15s ease, box-shadow .15s ease; box-shadow: 0 10px 30px rgba(255,106,26,0.35); }
-.btn:hover { transform: translateY(-2px) scale(1.03); filter: brightness(1.08); }
-.btn:active { transform: translateY(1px) scale(0.97); filter: brightness(0.95); }
-.btn:focus-visible { outline: 3px solid var(--cream); outline-offset: 4px; }
-.btn[disabled] { opacity: 0.35; cursor: not-allowed; transform: none; filter: grayscale(0.6); }
-.btn.pulse { animation: pulse 2.2s ease-in-out infinite; }
-@keyframes pulse { 50% { box-shadow: 0 10px 44px rgba(255,106,26,0.6); } }
-.btn.ghost { background: transparent; color: var(--cream); box-shadow: none; font-size: 18px; padding: 12px 26px; border: 2px solid rgba(244,239,230,0.35); clip-path: none; }
-.screen h2 { font: 800 italic 38px/1 var(--display); letter-spacing: 0.06em; margin: 0; text-transform: uppercase; position: relative; }
-.screen h2 small { display: block; font: 600 12px var(--mono); letter-spacing: 0.28em; color: var(--dim); margin-top: 8px; font-style: normal; }
-.cards { position: relative; display: grid; grid-template-columns: repeat(3, minmax(0, 260px)); gap: 18px; }
-.card { position: relative; aspect-ratio: 3 / 4; border-radius: 10px; overflow: hidden; cursor: pointer; border: 3px solid transparent; background: #111; padding: 0; text-align: left; color: var(--cream);
-  transition: transform .2s ease, border-color .2s ease, box-shadow .2s ease; box-shadow: 0 12px 30px rgba(0,0,0,0.45); }
-.card svg { position: absolute; inset: 0; width: 100%; height: 100%; }
-.card:hover { transform: translateY(-4px); }
-.card.sel { border-color: var(--orange); transform: translateY(-6px) scale(1.02); box-shadow: 0 16px 40px rgba(255,106,26,0.35); }
-.card .lbl { position: absolute; left: 0; right: 0; bottom: 0; padding: 18px 16px 16px; background: linear-gradient(transparent, rgba(0,0,0,0.75)); }
-.card .lbl b { display: block; font: 800 italic 34px/1 var(--display); letter-spacing: 0.06em; }
-.card .lbl span { font-size: 12.5px; color: rgba(244,239,230,0.82); }
-.card .tick { position: absolute; top: 12px; right: 12px; width: 30px; height: 30px; border-radius: 50%; background: var(--orange); color: #160a02; display: grid; place-items: center; font: 800 18px var(--sans); opacity: 0; transform: scale(.5); transition: .2s; }
-.card.sel .tick { opacity: 1; transform: none; }
-.row2 { position: relative; display: flex; gap: 16px; align-items: center; flex-wrap: wrap; justify-content: center; }
-#finish { z-index: 25; background: rgba(8,12,10,0.72); backdrop-filter: blur(4px); }
-#finish .time { font: 800 italic 84px/1 var(--display); color: var(--orange); position: relative; }
 #progress { top: calc(12px + env(safe-area-inset-top, 0px)); left: 50%; transform: translateX(-50%); width: min(420px, 60vw); display: grid; gap: 6px; text-align: center; }
-#progress .clock { font: 600 26px/1 var(--mono); } #progress .bar i { background: var(--orange); }
-#toast { position: fixed; top: 22%; left: 50%; transform: translateX(-50%); font: 800 italic 44px/1 var(--display); letter-spacing: 0.06em; color: #e3b448; text-shadow: 0 4px 18px rgba(0,0,0,0.6); pointer-events: none; }
-#replayBar { position: fixed; z-index: 22; left: 0; right: 0; bottom: 0; display: flex; align-items: center; gap: 18px; padding: 14px max(16px, env(safe-area-inset-right, 0px)) calc(14px + env(safe-area-inset-bottom, 0px)) max(16px, env(safe-area-inset-left, 0px)); background: linear-gradient(transparent, rgba(0,0,0,0.65)); }
-#replayBar b { font: 900 italic 30px/1 var(--display); letter-spacing: 0.1em; color: var(--orange); }
-#replayBar span { font: 600 13px var(--mono); letter-spacing: 0.16em; color: var(--dim); flex: 1; }
+#progress .clock { font: 600 28px/1 var(--display); letter-spacing: 0.06em; } #progress .bar i { background: var(--accent); }
+#toast { position: fixed; top: 22%; left: 50%; transform: translateX(-50%); padding: 10px 22px; font: 700 30px/1 var(--display); letter-spacing: 0.16em; color: #fff; text-transform: uppercase; white-space: nowrap;
+  background: linear-gradient(90deg, transparent, rgba(7,9,11,0.7) 15%, rgba(7,9,11,0.7) 85%, transparent); border-bottom: 2px solid var(--accent); pointer-events: none; animation: toast 260ms var(--ease) both; }
+@keyframes toast { from { opacity: 0; transform: translate(-50%, -8px); } }
+#menuBtn { top: calc(12px + env(safe-area-inset-top, 0px)); right: max(12px, env(safe-area-inset-right, 0px)); cursor: pointer; color: var(--ink); border: 0; font: 600 11px var(--mono); letter-spacing: 0.16em; transition: background var(--t); }
+#menuBtn:hover { background: rgba(46,168,255,0.14); }
+#replayBar { position: fixed; z-index: 22; left: 0; right: 0; bottom: 0; display: flex; align-items: center; gap: 18px; padding: 14px max(16px, env(safe-area-inset-right, 0px)) calc(14px + env(safe-area-inset-bottom, 0px)) max(16px, env(safe-area-inset-left, 0px)); }
+#replayBar b { font: 700 26px/1 var(--display); letter-spacing: 0.24em; color: #fff; display: flex; align-items: center; gap: 10px; }
+#replayBar b::before { content: ""; width: 9px; height: 9px; border-radius: 50%; background: var(--bad); animation: rec 1.4s ease-in-out infinite; }
+@keyframes rec { 50% { opacity: 0.25; } }
+#replayBar span { font: 500 11.5px var(--mono); letter-spacing: 0.24em; color: var(--accent2); flex: 1; }
 .cinema::before, .cinema::after { content: ""; position: fixed; left: 0; right: 0; height: 9vh; background: #000; z-index: 21; pointer-events: none; } .cinema::before { top: 0; } .cinema::after { bottom: 0; }
-.exrow { margin-top: -14px; }
-.exbtn { font: 800 italic 17px/1 var(--display); letter-spacing: 0.08em; color: var(--cream); background: rgba(255,255,255,0.06); border: 2px solid rgba(255,106,26,0.45); border-radius: 6px; padding: 11px 8px; cursor: pointer; transition: .15s; }
-.exbtn:hover { background: rgba(255,106,26,0.18); }
-.exbtn.on { background: var(--orange); color: #160a02; border-color: var(--orange); box-shadow: 0 6px 22px rgba(255,106,26,0.45); }
-#pauseMenu { background: rgba(8,12,10,0.74); backdrop-filter: blur(5px); } #pauseMenu::before { display: none; }
-.mix { position: relative; display: grid; gap: 14px; width: min(420px, 90vw); padding: 18px 22px; background: var(--panel); border: 1px solid rgba(255,255,255,0.1); border-radius: 8px; }
-.mix h3 { margin: 0; font: 700 12px var(--mono); letter-spacing: 0.24em; color: var(--dim); }
-.mix label { display: grid; grid-template-columns: 130px 1fr 44px; align-items: center; gap: 12px; font: 600 13px var(--mono); letter-spacing: 0.06em; }
-.mix input[type=range] { width: 100%; accent-color: var(--orange); } .mix label b { text-align: right; font-weight: 500; color: var(--dim); }
-#menuBtn { top: calc(12px + env(safe-area-inset-top, 0px)); right: max(12px, env(safe-area-inset-right, 0px)); cursor: pointer; color: var(--ink); border: 0; font: 600 12px var(--mono); letter-spacing: 0.1em; }
-@media (max-width: 760px) { .cards { grid-template-columns: 1fr; width: min(320px, 100%); } .card { aspect-ratio: 16 / 9; } }
-@media (max-width: 700px) { #help, #telemetry { display: none; } #stats { width: auto; right: 12px; } }
+
+@media (max-width: 860px) { .cards { grid-template-columns: 1fr; width: min(420px, 100%); gap: 10px; } .card { aspect-ratio: 16 / 7; } .card .lbl b { font-size: 26px; } }
+@media (max-width: 700px) { #help, #telemetry { display: none; } #stats { width: auto; right: 12px; } .btn.hero { --h: 56px; padding: 0 44px; font-size: 22px; } .screen h2 { font-size: 30px; } #finish .time { font-size: 72px; } }
+@media (prefers-reduced-motion: reduce) { *, *::before, *::after { animation-duration: 1ms !important; animation-iteration-count: 1 !important; transition-duration: 1ms !important; } }
 </style>
-<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Barlow:wght@400;600;700&family=Barlow+Condensed:ital,wght@1,700;1,800;1,900&family=JetBrains+Mono:wght@500;600&display=swap">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Barlow:wght@400;500;600;700&family=Barlow+Condensed:wght@500;600;700;800&family=JetBrains+Mono:wght@500;600&display=swap">
 <canvas id="view"></canvas>
 <div id="hud" hidden>
 <div id="stats" class="panel"></div>
@@ -102,48 +160,55 @@ kbd { font: 500 11px var(--mono); background: rgba(255,255,255,0.14); border-rad
 </div>
 </div>
 <div id="mainMenu" class="screen">
+  <div class="ridges"><i class="r1"></i><i class="r2"></i><i class="r3"></i></div>
   <div class="logo">
-    <svg viewBox="0 0 560 210" role="img" aria-label="DailyMTB">
-      <defs><linearGradient id="lg" x1="0" x2="0" y1="0" y2="1"><stop offset="0" stop-color="#ffb37a"/><stop offset="1" stop-color="#ff6a1a"/></linearGradient></defs>
-      <path d="M150 92 L222 18 L258 54 L282 30 L352 92" fill="none" stroke="#f4efe6" stroke-width="7" stroke-linejoin="round" stroke-linecap="round"/>
-      <path d="M206 34 L222 18 L238 34 L228 30 L222 38 L214 30 Z" fill="#f4efe6"/>
-      <path d="M118 104 C 210 60, 300 128, 440 70" fill="none" stroke="url(#lg)" stroke-width="5" stroke-dasharray="2 9" stroke-linecap="round"/>
-      <text x="280" y="176" text-anchor="middle" font-family="Barlow Condensed, Barlow, sans-serif" font-style="italic" font-weight="900" font-size="92" letter-spacing="2">
-        <tspan fill="#f4efe6">DAILY</tspan><tspan fill="url(#lg)">MTB</tspan></text>
-      <rect x="128" y="190" width="304" height="5" fill="#ff6a1a" transform="skewX(-20)"/>
+    <svg viewBox="0 0 620 200" role="img" aria-label="DailyMTB">
+      <defs><linearGradient id="lgB" x1="0" x2="1"><stop offset="0" stop-color="#7cc8ff"/><stop offset="1" stop-color="#1186e6"/></linearGradient>
+        <linearGradient id="lgW" x1="0" x2="0" y1="0" y2="1"><stop offset="0" stop-color="#ffffff"/><stop offset="1" stop-color="#b9c4cc"/></linearGradient></defs>
+      <g transform="translate(310 58)"><path d="M-70 26 L-22 -22 L4 4 L22 -14 L70 26" fill="none" stroke="url(#lgW)" stroke-width="6" stroke-linejoin="miter"/>
+        <path d="M-96 40 C -40 22, 10 52, 96 18" fill="none" stroke="url(#lgB)" stroke-width="4" stroke-linecap="round"/></g>
+      <text x="310" y="170" text-anchor="middle" font-family="Barlow Condensed, Barlow, sans-serif" font-weight="800" font-size="96" letter-spacing="10" transform="skewX(-8) translate(24 0)">
+        <tspan fill="url(#lgW)">DAILY</tspan><tspan fill="url(#lgB)">MTB</tspan></text>
     </svg>
-    <div class="tag">New trail · every ride</div>
+    <div class="tag">Downhill · A new trail every ride</div>
   </div>
-  <button class="btn pulse" id="playBtn">PLAY</button>
+  <button class="btn hero" id="playBtn"><span>Play</span></button>
+  <div class="menuFoot">EXTREME TRACK GENERATOR · SNOW · DESERT · FOREST</div>
 </div>
 <div id="biomeMenu" class="screen" hidden>
-  <h2>Choose your mountain<small>Each run is a brand-new 1–2 km downhill trail</small></h2>
+  <h2><span class="eyebrow">Select terrain</span><br>Choose your mountain<small>Every run is a fresh 0.3–0.9 km downhill from the Extreme track generator</small></h2>
   <div class="cards">
-    <button class="card" data-biome="snow"><svg viewBox="0 0 300 400" preserveAspectRatio="xMidYMid slice"><defs><linearGradient id="s1" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#9fc0e0"/><stop offset="1" stop-color="#e9f1f8"/></linearGradient></defs><rect width="300" height="400" fill="url(#s1)"/><path d="M-10 250 L70 110 L120 180 L170 70 L250 200 L310 140 L310 400 L-10 400Z" fill="#c8d6e4"/><path d="M70 110 L88 142 L74 136 L60 150 Z M170 70 L192 110 L176 102 L160 118 L150 104 Z" fill="#fff"/><path d="M-10 300 L90 230 L180 290 L310 220 L310 400 L-10 400Z" fill="#f4f8fc"/><g fill="#24433a"><path d="M40 300 l14 -46 l14 46z"/><path d="M230 290 l12 -40 l12 40z"/><path d="M258 300 l10 -32 l10 32z"/></g><path d="M120 400 C 140 340, 220 330, 200 270" stroke="#b9c7d6" stroke-width="10" fill="none"/></svg><span class="tick">✓</span><span class="lbl"><b>SNOW</b><span>Alpine pines, open snowfields, icy patches</span></span></button>
-    <button class="card" data-biome="desert"><svg viewBox="0 0 300 400" preserveAspectRatio="xMidYMid slice"><defs><linearGradient id="d1" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#f2b46b"/><stop offset="1" stop-color="#f7dcae"/></linearGradient></defs><rect width="300" height="400" fill="url(#d1)"/><circle cx="220" cy="90" r="34" fill="#fff1c9"/><path d="M-10 220 L40 220 L50 160 L120 160 L130 220 L200 220 L215 180 L260 180 L270 230 L310 230 L310 400 L-10 400Z" fill="#c4743f"/><path d="M-10 290 C 80 250, 160 300, 310 260 L310 400 L-10 400Z" fill="#e0a565"/><g fill="#4f6b3a"><rect x="58" y="270" width="10" height="46" rx="5"/><rect x="48" y="282" width="8" height="18" rx="4"/><rect x="70" y="276" width="8" height="20" rx="4"/><rect x="236" y="250" width="8" height="34" rx="4"/></g><path d="M100 400 C 130 350, 210 340, 180 290" stroke="#b07a4c" stroke-width="10" fill="none"/></svg><span class="tick">✓</span><span class="lbl"><b>DESERT</b><span>Sandstone ridges, drops, fast dusty lines</span></span></button>
-    <button class="card" data-biome="forest"><svg viewBox="0 0 300 400" preserveAspectRatio="xMidYMid slice"><defs><linearGradient id="f1" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#8fb6c9"/><stop offset="1" stop-color="#c7dbc4"/></linearGradient></defs><rect width="300" height="400" fill="url(#f1)"/><path d="M-10 230 L80 150 L150 200 L230 130 L310 190 L310 400 L-10 400Z" fill="#3f6247"/><g fill="#1f3b2a"><path d="M20 320 l22 -90 l22 90z"/><path d="M60 330 l18 -70 l18 70z"/><path d="M200 320 l24 -96 l24 96z"/><path d="M246 330 l18 -74 l18 74z"/><path d="M150 300 l14 -52 l14 52z"/></g><path d="M-10 330 C 80 300, 200 340, 310 310 L310 400 L-10 400Z" fill="#2c4a30"/><path d="M110 400 C 140 350, 200 350, 170 300" stroke="#6b4a2c" stroke-width="10" fill="none"/></svg><span class="tick">✓</span><span class="lbl"><b>FOREST</b><span>Roots, berms, rock gardens, tight woods</span></span></button>
+    <button class="card" data-biome="snow"><svg viewBox="0 0 300 400" preserveAspectRatio="xMidYMid slice"><defs><linearGradient id="s1" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#9fc0e0"/><stop offset="1" stop-color="#e9f1f8"/></linearGradient></defs><rect width="300" height="400" fill="url(#s1)"/><path d="M-10 250 L70 110 L120 180 L170 70 L250 200 L310 140 L310 400 L-10 400Z" fill="#c8d6e4"/><path d="M70 110 L88 142 L74 136 L60 150 Z M170 70 L192 110 L176 102 L160 118 L150 104 Z" fill="#fff"/><path d="M-10 300 L90 230 L180 290 L310 220 L310 400 L-10 400Z" fill="#f4f8fc"/><g fill="#24433a"><path d="M40 300 l14 -46 l14 46z"/><path d="M230 290 l12 -40 l12 40z"/><path d="M258 300 l10 -32 l10 32z"/></g><path d="M120 400 C 140 340, 220 330, 200 270" stroke="#b9c7d6" stroke-width="10" fill="none"/></svg><span class="tick">✓</span><i class="selbar"></i><span class="lbl"><em>ALPINE</em><b>SNOW</b><span>Alpine pines, open snowfields, icy patches</span></span></button>
+    <button class="card" data-biome="desert"><svg viewBox="0 0 300 400" preserveAspectRatio="xMidYMid slice"><defs><linearGradient id="d1" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#f2b46b"/><stop offset="1" stop-color="#f7dcae"/></linearGradient></defs><rect width="300" height="400" fill="url(#d1)"/><circle cx="220" cy="90" r="34" fill="#fff1c9"/><path d="M-10 220 L40 220 L50 160 L120 160 L130 220 L200 220 L215 180 L260 180 L270 230 L310 230 L310 400 L-10 400Z" fill="#c4743f"/><path d="M-10 290 C 80 250, 160 300, 310 260 L310 400 L-10 400Z" fill="#e0a565"/><g fill="#4f6b3a"><rect x="58" y="270" width="10" height="46" rx="5"/><rect x="48" y="282" width="8" height="18" rx="4"/><rect x="70" y="276" width="8" height="20" rx="4"/><rect x="236" y="250" width="8" height="34" rx="4"/></g><path d="M100 400 C 130 350, 210 340, 180 290" stroke="#b07a4c" stroke-width="10" fill="none"/></svg><span class="tick">✓</span><i class="selbar"></i><span class="lbl"><em>ARID</em><b>DESERT</b><span>Sandstone ridges, drops, fast dusty lines</span></span></button>
+    <button class="card" data-biome="forest"><svg viewBox="0 0 300 400" preserveAspectRatio="xMidYMid slice"><defs><linearGradient id="f1" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#8fb6c9"/><stop offset="1" stop-color="#c7dbc4"/></linearGradient></defs><rect width="300" height="400" fill="url(#f1)"/><path d="M-10 230 L80 150 L150 200 L230 130 L310 190 L310 400 L-10 400Z" fill="#3f6247"/><g fill="#1f3b2a"><path d="M20 320 l22 -90 l22 90z"/><path d="M60 330 l18 -70 l18 70z"/><path d="M200 320 l24 -96 l24 96z"/><path d="M246 330 l18 -74 l18 74z"/><path d="M150 300 l14 -52 l14 52z"/></g><path d="M-10 330 C 80 300, 200 340, 310 310 L310 400 L-10 400Z" fill="#2c4a30"/><path d="M110 400 C 140 350, 200 350, 170 300" stroke="#6b4a2c" stroke-width="10" fill="none"/></svg><span class="tick">✓</span><i class="selbar"></i><span class="lbl"><em>WOODLAND</em><b>FOREST</b><span>Roots, berms, rock gardens, tight woods</span></span></button>
   </div>
-  <div class="cards exrow">
-    <button class="exbtn" data-biome="snow">⚡ EXTREME SNOW</button><button class="exbtn" data-biome="desert">⚡ EXTREME DESERT</button><button class="exbtn" data-biome="forest">⚡ EXTREME FOREST</button>
-  </div>
-  <div class="row2"><button class="btn ghost" id="backBtn">BACK</button><button class="btn" id="genBtn" disabled>GENERATE TRACK</button></div>
+  <div class="genInfo"><i></i>Extreme track generator · massive jumps, big drops, steep chutes</div>
+  <div class="row2"><button class="btn ghost" id="backBtn"><span>Back</span></button><button class="btn" id="genBtn" disabled><span>Generate track</span></button></div>
 </div>
 <div id="finish" class="screen" hidden>
-  <h2>Finish<small id="finishInfo"></small></h2>
+  <h2><span class="eyebrow">Run complete</span><br>Finish<small id="finishInfo"></small></h2>
   <div class="time" id="finishTime">0:00.0</div>
-  <div class="row2"><button class="btn ghost" id="menuBtn2">MENU</button><button class="btn ghost" id="replayBtn">▶ WATCH REPLAY</button><button class="btn ghost" id="newBtn">NEW TRACK</button><button class="btn" id="againBtn">RIDE AGAIN · VS GHOST</button></div>
+  <div class="row2"><button class="btn ghost" id="menuBtn2"><span>Menu</span></button><button class="btn ghost" id="replayBtn"><span>▶ Watch replay</span></button><button class="btn ghost" id="newBtn"><span>New track</span></button><button class="btn" id="againBtn"><span>Ride again · vs ghost</span></button></div>
 </div>
 <div id="pauseMenu" class="screen" hidden>
-  <h2>Paused<small>P or Esc to resume</small></h2>
+  <h2><span class="eyebrow">Paused</span><br>Settings<small>P or Esc to resume</small></h2>
   <div class="mix"><h3>SOUND</h3>
     <label>Master<input type="range" id="volMaster" min="0" max="100"><b id="volMasterV"></b></label>
     <label>Bike &amp; riding<input type="range" id="volBike" min="0" max="100"><b id="volBikeV"></b></label>
     <label>Ambience<input type="range" id="volAmb" min="0" max="100"><b id="volAmbV"></b></label>
     <label>Landings<input type="range" id="volFx" min="0" max="100"><b id="volFxV"></b></label>
   </div>
-  <div class="row2"><button class="btn ghost" id="muteBtn">MUTE</button><button class="btn ghost" id="menuBtn3">QUIT TO MENU</button><button class="btn" id="resumeBtn">RESUME</button></div>
+  <div class="row2"><button class="btn ghost" id="muteBtn"><span>Mute</span></button><button class="btn ghost" id="menuBtn3"><span>Quit to menu</span></button><button class="btn" id="resumeBtn"><span>Resume</span></button></div>
 </div>
-<div id="replayBar" hidden><b>REPLAY</b><span id="replayShot"></span><button class="btn ghost" id="replayExit">EXIT <kbd>Esc</kbd></button></div>
-<div id="loading" hidden><div class="spin"></div><div id="loadText">GENERATING TRAIL…</div></div>
+<div id="replayBar" hidden><b>REPLAY</b><span id="replayShot"></span><button class="btn ghost" id="replayExit"><span>Exit</span> <kbd>Esc</kbd></button></div>
+<div id="loading" hidden>
+  <svg viewBox="0 0 440 140" aria-hidden="true"><path d="M0 120 L60 70 L110 95 L170 40 L230 85 L290 55 L360 100 L440 60" fill="none" stroke="#1c242b" stroke-width="2"/>
+    <path class="trailPath" d="M20 40 C 90 30, 120 90, 200 80 S 330 120, 420 110" fill="none" stroke="#2ea8ff" stroke-width="3" stroke-linecap="round"/>
+    <circle class="dot" r="5" fill="#fff"/></svg>
+  <p>Extreme track generator</p>
+  <h3>Building <span id="loadBiome">FOREST</span> trail</h3>
+  <div class="steps"><span>Shaping terrain</span><span>Placing features</span><span>Dressing the mountain</span></div>
+  <div id="loadText" hidden></div>
+</div>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
 <script type="module" src="src/main.js"></script>

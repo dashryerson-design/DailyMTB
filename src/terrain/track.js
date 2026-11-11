@@ -175,6 +175,9 @@ function profile(seg, ls, d, noise) {
 }
 
 // a rideable track for a biome: generate, check, and retry with a new seed if any rule is broken
+// Extreme track generator: the default gameplay route for every biome (lots of massive jumps, big
+// drops, steep chutes and berms). The standard layout (extreme = false) is kept for the test tools.
+export const extremeTrackGenerator = (biome, seed) => generateTrack(biome, seed, true);
 export function generateTrack(biome, seed = (Math.random() * 1e9) | 0, extreme = false) {
   for (let tries = 0; tries < 8; tries++) {
     const t = buildTrack(seed + tries * 101, { biome, extreme });

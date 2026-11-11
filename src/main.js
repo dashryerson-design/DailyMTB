@@ -1,4 +1,4 @@
-import { generateTrack } from './terrain/track.js';
+import { extremeTrackGenerator } from './terrain/track.js';
 import { RideSystem } from './physics/system.js';
 import { V, Q, clamp } from './core/math.js';
 import * as G from './physics/geometry.js';
@@ -47,11 +47,10 @@ document.querySelectorAll('.card').forEach(c => c.onclick = () => {
   document.querySelectorAll('.card').forEach(o => o.classList.toggle('sel', o === c));
   biome = c.dataset.biome; $('genBtn').disabled = false;
 });
-$('genBtn').onclick = () => load(biome, false);
-document.querySelectorAll('.exbtn').forEach(c => c.onclick = () => load(c.dataset.biome, true));
+$('genBtn').onclick = () => load(biome);
 $('replayBtn').onclick = () => startReplay();
 $('replayExit').onclick = () => endReplay();
-$('newBtn').onclick = () => load(L.track.biome, L.extreme);
+$('newBtn').onclick = () => load(L.track.biome);
 $('againBtn').onclick = () => { show('hud'); restartRun(); mode = 'ride'; };
 $('menuBtn2').onclick = $('menuBtn').onclick = () => toMenu();
 addEventListener('keydown', (e) => { if (e.code === 'Escape' && mode === 'replay') endReplay(); else if (e.code === 'Escape' && mode === 'ride') setPause(!paused); });
@@ -75,18 +74,21 @@ function gate(track, s, text, color) {
 $('resumeBtn').onclick = () => setPause(false);
 $('menuBtn3').onclick = () => toMenu();
 for (const [k, id] of Object.entries({ master: 'volMaster', bike: 'volBike', amb: 'volAmb', fx: 'volFx' })) {
-  const el = $(id), lab = $(id + 'V'); el.value = Math.round(snd.vol[k] * 100); lab.textContent = el.value + '%';
-  el.oninput = () => { snd.setVol(k, el.value / 100); lab.textContent = el.value + '%'; };
+  const el = $(id), lab = $(id + 'V'), fill = () => el.style.setProperty('--p', el.value + '%'); el.value = Math.round(snd.vol[k] * 100); lab.textContent = el.value + '%'; fill();
+  el.oninput = () => { snd.setVol(k, el.value / 100); lab.textContent = el.value + '%'; fill(); };
   el.onchange = () => { el.blur(); snd.preview(k); };
 }
-const muteLabel = () => { $('muteBtn').textContent = snd.muted ? 'UNMUTE' : 'MUTE'; }; muteLabel();
+const muteLabel = () => { $('muteBtn').innerHTML = `<span>${snd.muted ? 'Unmute' : 'Mute'}</span>`; }; muteLabel();
 $('muteBtn').onclick = () => { snd.setMuted(!snd.muted); muteLabel(); };
-function load(b, extreme = false) {
+// every new track comes from the Extreme track generator (no generator choice for the player)
+function load(b) {
+  if (mode === 'loading' || !b) return;   // ignore repeat requests while a track is being generated
+  const extreme = true;
   setPause(false);
-  show('loading'); $('loadText').textContent = `GENERATING ${extreme ? 'EXTREME ' : ''}${b.toUpperCase()} TRAIL…`; mode = 'loading';
+  show('loading'); $('loadBiome').textContent = b.toUpperCase(); $('genBtn').disabled = true; mode = 'loading';
   setTimeout(() => {                    // let the loading screen paint before the heavy work
     if (L) { disposeTree(L.world); }
-    const track = generateTrack(b, undefined, extreme), w = buildWorld(scene, track), sys = new RideSystem(track);
+    const track = extremeTrackGenerator(b), w = buildWorld(scene, track), sys = new RideSystem(track);
     w.root.add(gate(track, 6, 'START', '#f4efe6'), gate(track, track.total - 8, 'FINISH', '#ff6a1a'));
     // 5 checkpoints spread evenly along the run (nudged off jumps/drops so you never respawn on a lip)
     const cps = [1, 2, 3, 4, 5].map(i => { let cs = track.total * i / 6; for (let k = 0; k < 40; k++) { const sg = track.segs.find(g => cs >= g.s0 - 2 && cs < g.s0 + g.len + 2); if (!sg || !sg.feat) break; cs = sg.s0 + sg.len + 4; } return cs; });
@@ -97,8 +99,9 @@ function load(b, extreme = false) {
     $('helpTitle').textContent = `${b} · ${(track.total / 1000).toFixed(2)} km`;
     $('trackname').textContent = `${extreme ? 'EXTREME ' : ''}${b.toUpperCase()} · ${(track.total / 1000).toFixed(2)} km · seed ${track.seed}`;
     window.__dbg = { snd, renderer, scene, cam, bike: sys.bike, sys, track, get L() { return L; } };
-    restartRun(); show('hud'); mode = 'ride';
-  }, 60);
+    restartRun(); show('hud'); mode = 'ride'; $('genBtn').disabled = false;
+    const ld = $('loading'); ld.hidden = false; ld.classList.add('out'); setTimeout(() => { ld.hidden = true; ld.classList.remove('out'); }, 450);   // fade into the ride
+  }, 220);   // let the generation screen animate in before the heavy work
 }
 function spawn(i) { const s = L.track.sections[i].s; L.section = i; L.sys.reset(Math.max(4, s - (i ? 10 : 0)), i ? 7 : 0); L.rig.pos = null; L.hist.length = 0; L.si = 0; }
 function restartRun() { spawn(0); L.cp = 0; L.runT = 0; L.started = false; L.done = false; L.rec = []; L.recT = 0; toast(''); }
