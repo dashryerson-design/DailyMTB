@@ -47,7 +47,7 @@ class Chunks {
       const dx = Math.max(0, Math.abs(p.x - c.cx) - this.cell / 2), dz = Math.max(0, Math.abs(p.z - c.cz) - this.cell / 2), d = Math.hypot(dx, dz);
       _sph.center.set(c.cx, c.cy, c.cz); _sph.radius = c.rad;
       const inView = d < 30 || _fr.intersectsSphere(_sph);   // close cells always (their shadows can fall into view)
-      c.mesh.forEach((m, l) => { if (!m) return; const L = this.layers[l]; const f = Q[L.k] ?? Q.lod, nr = L.near * f, fr = L.far * f; m.visible = inView && d >= nr && d < fr; m.castShadow = Q.shadows && m.visible && d < (L.shadow || 0) * Q.shadowDist; });
+      c.mesh.forEach((m, l) => { if (!m) return; const L = this.layers[l]; const f = L.k === 'all' ? 1 : Q[L.k] ?? Q.lod, nr = L.near * f, fr = L.far * f; m.visible = inView && d >= nr && d < fr; m.castShadow = Q.shadows && m.visible && d < (L.shadow || 0) * Q.shadowDist; });
     }
   }
   hide(id, on, layers) {   // tuck one object away (or restore it) in the given layers
@@ -158,15 +158,15 @@ export function buildWorld(scene0, track) {
     { geo: trunkG, mat: LP ? toonMat({ color: new T.Color(0x6b4428).convertSRGBToLinear() }) : new T.MeshStandardMaterial({ vertexColors: true, roughness: 0.95, map: tex, bumpMap: tex, bumpScale: 0.02 }), near: 0, far: TREE_NEAR, k: 'tree', shadow: 32 },
     { geo: cactus ? folG : pineFarGeo(P.treeKind === 'snowpine'), mat: cactus ? folMat : farMat, near: TREE_NEAR, far: 600, k: 'tree' },
     // back rows (behind the trees lining the trail): mid-detail, no shadows, simple trunk
-    { geo: cactus ? folG : LP ? folG : pineFarGeo(P.treeKind === 'snowpine', 6, 10), mat: cactus ? folMat : farMat, near: 0, far: TREE_NEAR, k: 'tree', shadow: cactus || LP ? 30 : 0, receive: true },
-    { geo: cactus ? trunkG : new T.CylinderGeometry(0.06, 0.15, 1, 6).translate(0, 0.5, 0), mat: LP ? toonMat({ color: new T.Color(0x6b4428).convertSRGBToLinear() }) : new T.MeshStandardMaterial({ color: new T.Color(0x3a2a1e).convertSRGBToLinear(), roughness: 0.95 }), near: 0, far: TREE_NEAR, k: 'tree' },
+    { geo: cactus ? folG : LP ? folG : pineFarGeo(P.treeKind === 'snowpine', 6, 10), mat: cactus ? folMat : farMat, near: 0, far: LP ? 2000 : TREE_NEAR, k: LP ? 'all' : 'tree', shadow: cactus || LP ? 30 : 0, receive: true },
+    { geo: cactus ? trunkG : new T.CylinderGeometry(0.06, 0.15, 1, 6).translate(0, 0.5, 0), mat: LP ? toonMat({ color: new T.Color(0x6b4428).convertSRGBToLinear() }) : new T.MeshStandardMaterial({ color: new T.Color(0x3a2a1e).convertSRGBToLinear(), roughness: 0.95 }), near: 0, far: LP ? 2000 : TREE_NEAR, k: LP ? 'all' : 'tree' },
   ], 32); chunks.push(treeCh);
   // Low graphics: thin the forest to ~45% (keeping more of the trees right by the trail)
-  if (Q.level === 'low' && !cactus) { const keep = trees.filter(([x, z]) => r() < (track.trackDist(x, z) < 10 ? 0.65 : 0.35)); trees.length = 0; trees.push(...keep); }
+  if (Q.level === 'low' && !cactus && !LP) { const keep = trees.filter(([x, z]) => r() < (track.trackDist(x, z) < 10 ? 0.65 : 0.35)); trees.length = 0; trees.push(...keep); }
   const treeId = trees.map(([x, z, s]) => { const y = track.h(x, z); q.setFromAxisAngle(new T.Vector3(0, 1, 0), r() * 6.28);
     const F = new T.Matrix4().compose(new T.Vector3(x, y, z), q, new T.Vector3(s, s, s)), Tr = cactus ? null : new T.Matrix4().compose(new T.Vector3(x, y, z), q, new T.Vector3(s, 7.2 * s, s));
     const front = cactus || (!LP && Q.level !== 'low' && track.trackDist(x, z) < 14);   // only the row lining the trail gets the full tree (none on Low)
-    return treeCh.add(x, y, z, front ? [F, Tr, F, null, null] : [null, null, F, F, cactus ? null : Tr], new T.Color(0.85 + r() * 0.25, 0.85 + r() * 0.25, 0.8 + r() * 0.2)); });
+    return treeCh.add(x, y, z, front ? [F, Tr, F, null, null] : [null, null, LP ? null : F, F, cactus ? null : Tr], new T.Color(0.85 + r() * 0.25, 0.85 + r() * 0.25, 0.8 + r() * 0.2)); });
   treeCh.build();
   const bushG0 = bushGeo(track.biome === 'test' ? 'forest' : track.biome, LP), bushG = LP ? facetize(bushG0, { sat: 1.4, gain: 1.3, steps: 6 }) : bushG0, bushes = [];
   for (let sv = 0; sv < track.total; sv += 1.6) for (const sd of [-1, 1]) {      // low undergrowth along the trail edge
