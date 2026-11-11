@@ -22,29 +22,65 @@ function paint(g, f) {
 const displace = (g, f) => { const p = g.attributes.position; for (let i = 0; i < p.count; i++) { const v = f(p.getX(i), p.getY(i), p.getZ(i)); p.setXYZ(i, v[0], v[1], v[2]); } return g; };
 const mix = (a, b, t) => a.map((v, i) => v + (b[i] - v) * t);
 
-// conifer: stacked, drooping, irregular branch tiers (not clean cones); snow settles on the upper faces
-export function pineGeo(snowy, seed = 0) {
-  const tiers = 8, parts = [], H = 7.4;
-  for (let k = 0; k < tiers; k++) {
-    const u = k / (tiers - 1), rad = 2.35 * (1 - u * 0.86) + 0.15, h = 1.5 - 0.45 * u, y0 = 1.1 + u * (H - 2.2);
-    const c = new T.ConeGeometry(rad, h, 14, 2, true); c.translate(0, y0 + h / 2, 0);
-    displace(c, (x, y, z) => {
-      const a = Math.atan2(z, x), r = Math.hypot(x, z), rim = r / rad;   // rim ~1 at the bottom edge of the tier
-      const clump = 1 + 0.22 * Math.sin(a * 7 + k * 1.7 + seed) + 0.14 * nz(a * 2 + k * 3 + seed, k);   // branch clumps
-      return [x * clump, y - 0.32 * rim * rim * rad * 0.35, z * clump];   // tips droop
-    });
-    parts.push(paint(c, (x, y, z, nx, ny) => {
-      const r = Math.hypot(x, z) / rad, t = Math.min(1, r * 0.9 + 0.1 * nz(x * 3, z * 3 + y));
-      let col = mix([0.07, 0.13, 0.07], [0.20, 0.31, 0.15], t * (0.7 + 0.3 * u));   // dark inside, lighter needle tips
-      if (snowy) { const sn = (ny - 0.5) * 2.5 + 0.6 * nz(x * 1.7 + k, z * 1.7); if (sn > 0) col = mix(col, [0.92, 0.94, 0.98], Math.min(0.92, sn)); }
-      return col;
-    }));
+// conifer: whorls of drooping needle-branch sprays around the trunk (alpha-textured cards, two crossed
+// per branch for volume), shorter towards the top, plus a sparse dark inner mass so it never looks see-through
+const branchTex = {};
+function branchTexture(snowy) {
+  if (branchTex[snowy]) return branchTex[snowy];
+  const W = 256, H = 128, c = document.createElement('canvas'); c.width = W; c.height = H; const g = c.getContext('2d');
+  const stem = (x0, y0, x1, y1, w) => { g.strokeStyle = '#3a2a1c'; g.lineWidth = w; g.beginPath(); g.moveTo(x0, y0); g.lineTo(x1, y1); g.stroke(); };
+  // main stem along the card, side twigs fanning forward, needles along every twig
+  const twigs = [[0, 64, 250, 64]];
+  for (let k = 0; k < 14; k++) { const x = 18 + k * 16, sd = k % 2 ? 1 : -1, len = (1 - k / 16) * 52 + 10; twigs.push([x, 64, x + len * 0.75, 64 + sd * len * 0.8]); twigs.push([x + 8, 64, x + 8 + len * 0.7, 64 - sd * len * 0.7]); }
+  for (const [x0, y0, x1, y1] of twigs) {
+    const n = Math.hypot(x1 - x0, y1 - y0) / 2.2;
+    for (let i = 0; i < n; i++) {
+      const t = i / n, x = x0 + (x1 - x0) * t, y = y0 + (y1 - y0) * t, a = Math.atan2(y1 - y0, x1 - x0);
+      for (const sd of [-1, 1]) {
+        const na = a + sd * (0.9 + Math.random() * 0.4), L = 7 + Math.random() * 6 * (1 - 0.4 * t), l = 24 + Math.random() * 30;
+        g.strokeStyle = `rgb(${l * 0.7},${l * 1.15 + 18},${l * 0.6})`; g.lineWidth = 1.6;
+        g.beginPath(); g.moveTo(x, y); g.lineTo(x + Math.cos(na) * L, y + Math.sin(na) * L); g.stroke();
+      }
+    }
+    stem(x0, y0, x1, y1, x0 === 0 ? 3 : 1.4);
   }
-  return merge(parts);
+  if (snowy) { g.fillStyle = 'rgba(240,244,250,0.92)'; for (let i = 0; i < 70; i++) { const x = Math.random() * W, y = 40 + Math.random() * 48; g.beginPath(); g.ellipse(x, y, 6 + Math.random() * 12, 3 + Math.random() * 5, 0, 0, 6.28); g.fill(); } }
+  const t = new T.CanvasTexture(c); t.encoding = T.sRGBEncoding; t.anisotropy = 4; branchTex[snowy] = t; return t;
+}
+export function pineMaterial(snowy) {
+  const map = branchTexture(snowy);
+  const m = new T.MeshStandardMaterial({ map, alphaTest: 0.35, side: T.DoubleSide, vertexColors: true, roughness: 0.9 });
+  m.depth = new T.MeshDepthMaterial({ depthPacking: T.RGBADepthPacking, map, alphaTest: 0.35 });   // needle-shaped shadows
+  return m;
+}
+export function pineGeo(snowy, seed = 0) {
+  const parts = [], H = 7.6, whorls = 16;
+  for (let k = 0; k < whorls; k++) {
+    const u = k / (whorls - 1), y0 = 1.3 + u * (H - 1.6), L = 2.6 * (1 - u) ** 0.85 + 0.45, n = Math.round(9 - 3 * u);
+    for (let b = 0; b < n; b++) {
+      const a = (b / n) * Math.PI * 2 + k * 2.39 + seed + (nz(k, b) * 0.5), droop = (0.35 + 0.35 * (1 - u)) * L * 0.45, up = 0.25 * L * (0.3 + u);
+      for (const roll of [0, 1.15]) {
+        const c = new T.PlaneGeometry(L, L * 0.62, 4, 1); c.translate(L / 2, 0, 0); c.rotateX(Math.PI / 2 + roll * (b % 2 ? 1 : -1));
+        displace(c, (x, y, z) => { const t = x / L; return [x, y + up * t - droop * t * t, z]; });   // rises from the trunk, tips droop
+        c.rotateY(a); c.translate(0, y0, 0);
+        parts.push(paint(c, (x, y, z) => { const t = Math.min(1, Math.hypot(x, z) / L); const v = 0.45 + 0.55 * t * (0.75 + 0.25 * u); return [v, v, v * 0.95]; }));
+      }
+    }
+  }
+  // inner mass: a slim dark core so you can't see straight through the middle
+  const core = new T.ConeGeometry(0.9, H - 1.2, 10, 1, true); core.translate(0, 1.2 + (H - 1.2) / 2, 0);
+  const cg = paint(core, () => [0.06, 0.09, 0.05]); cg.setAttribute('uv', new T.BufferAttribute(new Float32Array(cg.attributes.position.count * 2).fill(0.02), 2)); parts.push(cg);
+  return mergeUV(parts);
+}
+// merge keeping uvs (for textured cards)
+function mergeUV(parts) {
+  const g = merge(parts); let n = 0; parts.forEach((p) => n += p.attributes.position.count);
+  const uv = new Float32Array(n * 2); let o = 0; for (const p of parts) { uv.set(p.attributes.uv.array, o); o += p.attributes.uv.array.length; }
+  g.setAttribute('uv', new T.BufferAttribute(uv, 2)); return g;
 }
 export function trunkGeo(cactus) {
   if (cactus) return null;
-  const g = new T.CylinderGeometry(0.09, 0.2, 1, 9, 4); g.translate(0, 0.5, 0);
+  const g = new T.CylinderGeometry(0.05, 0.15, 1, 9, 4); g.translate(0, 0.5, 0);
   displace(g, (x, y, z) => { const f = 1 + 0.08 * nz(Math.atan2(z, x) * 3, y * 4); return [x * f, y, z * f]; });
   return paint(g, (x, y) => mix([0.16, 0.11, 0.08], [0.33, 0.24, 0.17], 0.4 + 0.4 * nz(Math.atan2(0, 1) + x * 9, y * 6)));
 }

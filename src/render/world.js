@@ -1,6 +1,6 @@
 // Terrain meshes (chunked, high-res near the trail), rocks, roots, vegetation, lighting, sky.
 import { SURF, rng, makeNoise } from '../terrain/track.js';
-import { pineGeo, trunkGeo, cactusGeo, bushGeo, grassGeo, grassMaterial } from './flora.js';
+import { pineGeo, pineMaterial, trunkGeo, cactusGeo, bushGeo, grassGeo, grassMaterial } from './flora.js';
 const T = window.THREE;
 
 function detailTexture() {
@@ -94,8 +94,9 @@ export function buildWorld(scene0, track) {
   }
   for (let i = 0; i < P.trees * 6 && trees.length < P.trees + 800 * dens; i++) { const x = minX + r() * (maxX - minX), z = minZ + r() * (maxZ - minZ); if (track.trackDist(x, z) < 5.5 || (track.farDist && track.farDist(x, z) > 65)) continue; trees.push([x, z, 0.7 + r() * 0.8]); }
   const trunks = new T.InstancedMesh(trunkG, new T.MeshStandardMaterial({ vertexColors: true, roughness: 0.95, map: tex, bumpMap: tex, bumpScale: 0.02 }), trees.length);
-  const fol = new T.InstancedMesh(folG, new T.MeshStandardMaterial({ vertexColors: true, color: 0xffffff, roughness: 0.9 }), trees.length);
-  trees.forEach(([x, z, s], i) => { const y = track.h(x, z); q.setFromAxisAngle(new T.Vector3(0, 1, 0), r() * 6.28); trunks.setMatrixAt(i, mm.compose(new T.Vector3(x, y, z), q, new T.Vector3(s, (cactus ? 3.2 : 3.5) * s, s))); fol.setMatrixAt(i, mm.compose(new T.Vector3(x, y, z), q, new T.Vector3(s, s, s))); fol.setColorAt && fol.setColorAt(i, new T.Color(0.85 + r() * 0.25, 0.85 + r() * 0.25, 0.8 + r() * 0.2)); });
+  const fol = new T.InstancedMesh(folG, cactus ? new T.MeshStandardMaterial({ vertexColors: true, color: 0xffffff, roughness: 0.9 }) : pineMaterial(P.treeKind === 'snowpine'), trees.length);
+  if (fol.material.depth) fol.customDepthMaterial = fol.material.depth;
+  trees.forEach(([x, z, s], i) => { const y = track.h(x, z); q.setFromAxisAngle(new T.Vector3(0, 1, 0), r() * 6.28); trunks.setMatrixAt(i, mm.compose(new T.Vector3(x, y, z), q, new T.Vector3(s, (cactus ? 3.2 : 7.2) * s, s))); fol.setMatrixAt(i, mm.compose(new T.Vector3(x, y, z), q, new T.Vector3(s, s, s))); fol.setColorAt && fol.setColorAt(i, new T.Color(0.85 + r() * 0.25, 0.85 + r() * 0.25, 0.8 + r() * 0.2)); });
   trunks.castShadow = fol.castShadow = true; fol.receiveShadow = true; scene.add(trunks, fol);
   const bushG = bushGeo(track.biome === 'test' ? 'forest' : track.biome), bushes = [];
   for (let sv = 0; sv < track.total; sv += 1.6) for (const sd of [-1, 1]) {      // low undergrowth along the trail edge
@@ -134,7 +135,7 @@ export function buildWorld(scene0, track) {
     trees.forEach(([x, z, s], i) => {
       const near = (x - c.x) ** 2 + (z - c.z) ** 2 < (2.6 * s + 1.2) ** 2;
       if (near && !hidden.has(i)) { hidden.add(i); trunks.setMatrixAt(i, zero); fol.setMatrixAt(i, zero); dirty = true; }
-      else if (!near && hidden.has(i)) { hidden.delete(i); const y = track.h(x, z); trunks.setMatrixAt(i, tmpM.compose(new T.Vector3(x, y, z), new T.Quaternion(), new T.Vector3(s, (cactus ? 3.2 : 3.5) * s, s))); fol.setMatrixAt(i, tmpM.compose(new T.Vector3(x, y, z), new T.Quaternion(), new T.Vector3(s, s, s))); dirty = true; }
+      else if (!near && hidden.has(i)) { hidden.delete(i); const y = track.h(x, z); trunks.setMatrixAt(i, tmpM.compose(new T.Vector3(x, y, z), new T.Quaternion(), new T.Vector3(s, (cactus ? 3.2 : 7.2) * s, s))); fol.setMatrixAt(i, tmpM.compose(new T.Vector3(x, y, z), new T.Quaternion(), new T.Vector3(s, s, s))); dirty = true; }
     });
     if (dirty) { trunks.instanceMatrix.needsUpdate = true; fol.instanceMatrix.needsUpdate = true; }
   };
