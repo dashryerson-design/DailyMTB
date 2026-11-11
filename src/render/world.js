@@ -98,10 +98,10 @@ export function buildWorld(scene0, track) {
       // material kicked to the sides - its own colour so it reads clearly against the ground around it
       const jit = 0.28 * noise(x / 2.1 + 3, z / 2.1), mask = 1 - Math.min(1, Math.max(0, (td - (TW - 0.15 + jit)) / 0.3));
       const tb = (s === SURF.DIRT || s === SURF.SNOW || offLike) ? P.trail : base;
-      const rut = 1 - (track.biome === 'snow' ? 0.24 : 0.16) * Math.exp(-(((td - 0.32) / 0.11) ** 2)) * (0.7 + 0.3 * m2), grain = 0.88 + 0.2 * m2 + 0.06 * m;
+      const rut = 1 - (LP ? 0.07 : track.biome === 'snow' ? 0.24 : 0.16) * Math.exp(-(((td - 0.32) / 0.11) ** 2)) * (0.7 + 0.3 * m2), grain = LP ? 0.97 + 0.06 * m : 0.88 + 0.2 * m2 + 0.06 * m;   // cartoon: clean, even trail colour
       const trailC = tb.map((v) => v * rut * grain * (1 + 0.06 * Math.exp(-((td / 0.18) ** 2))));
       let c = offC.map((v, q) => v + (trailC[q] - v) * mask);
-      const band = Math.exp(-(((td - (TW + 0.3 + jit)) / 0.32) ** 2)) * (0.45 + 0.4 * m2);
+      const band = Math.exp(-(((td - (TW + 0.3 + jit)) / 0.32) ** 2)) * (LP ? 0.55 : 0.45 + 0.4 * m2);
       if (offLike || s === SURF.DIRT) c = c.map((v, q) => v + (P.edge[q] - v) * band * 0.65);
       col[k * 3] = c[0] ** 2.2; col[k * 3 + 1] = c[1] ** 2.2; col[k * 3 + 2] = c[2] ** 2.2;
     }
@@ -109,13 +109,13 @@ export function buildWorld(scene0, track) {
     const g = new T.BufferGeometry();
     g.setAttribute('position', new T.BufferAttribute(pos, 3)); g.setAttribute('color', new T.BufferAttribute(col, 3)); g.setAttribute('uv', new T.BufferAttribute(uv, 2));
     g.setIndex(idx); g.computeVertexNormals();
-    const m = new T.Mesh(LP ? facetize(g, { sat: 1.35, gain: 1.1, steps: 9 }) : g, terrainMat); m.receiveShadow = true; scene.add(m); return m;
+    const m = new T.Mesh(LP ? facetize(g, { sat: 1.3, gain: 1.08, steps: 18 }) : g, terrainMat); m.receiveShadow = true; scene.add(m); return m;
   };
   for (let cz = minZ; cz < maxZ; cz += CH) for (let cx = minX; cx < maxX; cx += CH) {
     let near = false;
     for (let z = cz; z <= cz + CH && !near; z += 2) for (let x = cx; x <= cx + CH; x += 2) if (track.trackDist(x, z) < 9) { near = true; break; }
     const lo = buildChunk(cx, cz, 13);
-    if (near) { const hi = buildChunk(cx, cz, LP ? 28 : { high: 80, medium: 54, low: 40 }[Q.level]); hi.visible = false; terrLod.push({ hi, lo, x: cx + CH / 2, z: cz + CH / 2 }); }
+    if (near) { const hi = buildChunk(cx, cz, { high: 80, medium: 54, low: 40 }[Q.level]); hi.visible = false; terrLod.push({ hi, lo, x: cx + CH / 2, z: cz + CH / 2 }); }
   }
 
   // rocks (same footprint/height as their heightfield domes)
