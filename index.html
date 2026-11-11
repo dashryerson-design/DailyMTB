@@ -74,6 +74,11 @@ kbd { font: 500 11px var(--mono); background: rgba(255,255,255,0.14); border-rad
 .exbtn { font: 800 italic 17px/1 var(--display); letter-spacing: 0.08em; color: var(--cream); background: rgba(255,255,255,0.06); border: 2px solid rgba(255,106,26,0.45); border-radius: 6px; padding: 11px 8px; cursor: pointer; transition: .15s; }
 .exbtn:hover { background: rgba(255,106,26,0.18); }
 .exbtn.on { background: var(--orange); color: #160a02; border-color: var(--orange); box-shadow: 0 6px 22px rgba(255,106,26,0.45); }
+#pauseMenu { background: rgba(8,12,10,0.74); backdrop-filter: blur(5px); } #pauseMenu::before { display: none; }
+.mix { position: relative; display: grid; gap: 14px; width: min(420px, 90vw); padding: 18px 22px; background: var(--panel); border: 1px solid rgba(255,255,255,0.1); border-radius: 8px; }
+.mix h3 { margin: 0; font: 700 12px var(--mono); letter-spacing: 0.24em; color: var(--dim); }
+.mix label { display: grid; grid-template-columns: 130px 1fr 44px; align-items: center; gap: 12px; font: 600 13px var(--mono); letter-spacing: 0.06em; }
+.mix input[type=range] { width: 100%; accent-color: var(--orange); } .mix label b { text-align: right; font-weight: 500; color: var(--dim); }
 #menuBtn { top: calc(12px + env(safe-area-inset-top, 0px)); right: max(12px, env(safe-area-inset-right, 0px)); cursor: pointer; color: var(--ink); border: 0; font: 600 12px var(--mono); letter-spacing: 0.1em; }
 @media (max-width: 760px) { .cards { grid-template-columns: 1fr; width: min(320px, 100%); } .card { aspect-ratio: 16 / 9; } }
 @media (max-width: 700px) { #help, #telemetry { display: none; } #stats { width: auto; right: 12px; } }
@@ -127,6 +132,16 @@ kbd { font: 500 11px var(--mono); background: rgba(255,255,255,0.14); border-rad
   <h2>Finish<small id="finishInfo"></small></h2>
   <div class="time" id="finishTime">0:00.0</div>
   <div class="row2"><button class="btn ghost" id="menuBtn2">MENU</button><button class="btn ghost" id="replayBtn">▶ WATCH REPLAY</button><button class="btn ghost" id="newBtn">NEW TRACK</button><button class="btn" id="againBtn">RIDE AGAIN · VS GHOST</button></div>
+</div>
+<div id="pauseMenu" class="screen" hidden>
+  <h2>Paused<small>P or Esc to resume</small></h2>
+  <div class="mix"><h3>SOUND</h3>
+    <label>Master<input type="range" id="volMaster" min="0" max="100"><b id="volMasterV"></b></label>
+    <label>Bike &amp; riding<input type="range" id="volBike" min="0" max="100"><b id="volBikeV"></b></label>
+    <label>Ambience<input type="range" id="volAmb" min="0" max="100"><b id="volAmbV"></b></label>
+    <label>Landings<input type="range" id="volFx" min="0" max="100"><b id="volFxV"></b></label>
+  </div>
+  <div class="row2"><button class="btn ghost" id="muteBtn">MUTE</button><button class="btn ghost" id="menuBtn3">QUIT TO MENU</button><button class="btn" id="resumeBtn">RESUME</button></div>
 </div>
 <div id="replayBar" hidden><b>REPLAY</b><span id="replayShot"></span><button class="btn ghost" id="replayExit">EXIT <kbd>Esc</kbd></button></div>
 <div id="loading" hidden><div class="spin"></div><div id="loadText">GENERATING TRAIL…</div></div>

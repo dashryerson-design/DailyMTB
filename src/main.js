@@ -6,6 +6,7 @@ import { BikeModel } from './render/bikeModel.js';
 import { RiderModel } from './render/riderModel.js';
 import { buildWorld, envMap } from './render/world.js';
 import { CameraRig, CAM_MODES } from './render/camera.js';
+import { Sound } from './game/sound.js';
 import { Dust } from './render/dust.js';
 import { Input } from './game/input.js';
 const T = window.THREE;
@@ -32,6 +33,12 @@ addEventListener('resize', resize); resize();
 
 let L = null;            // the loaded level: { track, sys, bike, rider, rig, world, sun, ... }
 let paused = false, biome = null, mode = 'menu';
+// sound: needs a user gesture to start, so every input event tries to unlock it
+const snd = new Sound();
+for (const ev of ['pointerdown', 'pointerup', 'mousedown', 'mouseup', 'click', 'touchstart', 'touchend', 'keydown', 'keyup']) addEventListener(ev, () => snd.unlock(), true);
+document.addEventListener('visibilitychange', () => { if (document.visibilityState === 'visible') snd.unlock(); });
+snd.badge();
+function setPause(v) { paused = !!v && mode === 'ride'; $('pauseMenu').hidden = !paused; }
 
 // ---- menus
 $('playBtn').onclick = () => show('biomeMenu');
@@ -47,8 +54,8 @@ $('replayExit').onclick = () => endReplay();
 $('newBtn').onclick = () => load(L.track.biome, L.extreme);
 $('againBtn').onclick = () => { show('hud'); restartRun(); mode = 'ride'; };
 $('menuBtn2').onclick = $('menuBtn').onclick = () => toMenu();
-addEventListener('keydown', (e) => { if (e.code === 'Escape' && mode === 'replay') endReplay(); else if (e.code === 'Escape' && mode === 'ride') toMenu(); });
-function toMenu() { mode = 'menu'; show('biomeMenu'); }
+addEventListener('keydown', (e) => { if (e.code === 'Escape' && mode === 'replay') endReplay(); else if (e.code === 'Escape' && mode === 'ride') setPause(!paused); });
+function toMenu() { setPause(false); mode = 'menu'; show('biomeMenu'); }
 
 function disposeTree(o) { o.traverse(n => { if (n.geometry) n.geometry.dispose(); if (n.material) [].concat(n.material).forEach(m => m.dispose()); }); o.parent && o.parent.remove(o); }
 
@@ -65,7 +72,17 @@ function gate(track, s, text, color) {
   return g;
 }
 
+$('resumeBtn').onclick = () => setPause(false);
+$('menuBtn3').onclick = () => toMenu();
+for (const [k, id] of Object.entries({ master: 'volMaster', bike: 'volBike', amb: 'volAmb', fx: 'volFx' })) {
+  const el = $(id), lab = $(id + 'V'); el.value = Math.round(snd.vol[k] * 100); lab.textContent = el.value + '%';
+  el.oninput = () => { snd.setVol(k, el.value / 100); lab.textContent = el.value + '%'; };
+  el.onchange = () => { el.blur(); snd.preview(k); };
+}
+const muteLabel = () => { $('muteBtn').textContent = snd.muted ? 'UNMUTE' : 'MUTE'; }; muteLabel();
+$('muteBtn').onclick = () => { snd.setMuted(!snd.muted); muteLabel(); };
 function load(b, extreme = false) {
+  setPause(false);
   show('loading'); $('loadText').textContent = `GENERATING ${extreme ? 'EXTREME ' : ''}${b.toUpperCase()} TRAIL…`; mode = 'loading';
   setTimeout(() => {                    // let the loading screen paint before the heavy work
     if (L) { disposeTree(L.world); }
@@ -79,7 +96,7 @@ function load(b, extreme = false) {
     $('sections').innerHTML = names.map((s, i) => `<li><kbd>${i + 1}</kbd> ${s.name}</li>`).join('');
     $('helpTitle').textContent = `${b} · ${(track.total / 1000).toFixed(2)} km`;
     $('trackname').textContent = `${extreme ? 'EXTREME ' : ''}${b.toUpperCase()} · ${(track.total / 1000).toFixed(2)} km · seed ${track.seed}`;
-    window.__dbg = { renderer, scene, cam, bike: sys.bike, sys, track, get L() { return L; } };
+    window.__dbg = { snd, renderer, scene, cam, bike: sys.bike, sys, track, get L() { return L; } };
     restartRun(); show('hud'); mode = 'ride';
   }, 60);
 }
@@ -91,7 +108,7 @@ input.on('KeyR', () => L && toCheckpoint());
 input.on('Delete', () => L && restartRun()); input.on('Backspace', () => L && restartRun());
 input.on('KeyT', () => L && restartRun());
 input.on('KeyC', () => L && L.rig.next());
-input.on('KeyP', () => { paused = !paused; });
+input.on('KeyP', () => { if (mode === 'ride') setPause(!paused); });
 input.handlers.digit = (n) => { if (L && n <= Math.min(9, L.track.sections.length)) { spawn(n - 1); L.started = false; } };
 
 // distance along the trail (windowed search around the last known sample)
@@ -162,6 +179,7 @@ function frame(now) {
     L.sun.position.set(bike.p.x + 30, bike.p.y + 60, bike.p.z + 20); L.sun.target.position.set(bike.p.x, bike.p.y, bike.p.z);
     renderer.render(scene, cam);
   }
+  snd.update(L, mode, paused);
   requestAnimationFrame(frame);
 }
 // ---- cinematic replay: interpolated snapshots, rotating camera shots, slow-mo in the air
@@ -181,6 +199,7 @@ function replayFrame(dt) { showGhost(false);
   const rec = L.rec, tr = L.track, n = rec.length, P = poseAt(rec, R.t), { f, a, b, u, i0 } = P;
   R.t += dt * (a.air ? 0.35 : 1); if (R.t * 30 >= n - 1) { R.t = 0; R.shot = -1; }
   model.update(f); riderModel.update({ x: P.x }, f);
+  snd.rf = { i: a, crank: typeof f.crank === 'number' ? f.crank : a.crank, dt: dt * (a.air ? 0.35 : 1) };
   const vel = lv(a.v, b.v, u), fh = new V(vel.x, 0, vel.z).len() > 0.5 ? new V(vel.x, 0, vel.z).norm() : new V(1, 0, 0), rt = new V(-fh.z, 0, fh.x);
   if ((R.shotT -= dt) <= 0 || R.shot < 0) { R.shot = (R.shot + 1 + Math.floor(Math.random() * 3)) % 4; R.shotT = 3.5; R.pos = null;
     const ahead = rec[Math.min(n - 1, i0 + 75)].p, sd = Math.random() < 0.5 ? -1 : 1; R.anchor = ahead.add(rt.mul(sd * (4 + Math.random() * 3)));
