@@ -115,6 +115,10 @@ const restyle = () => { for (const o of [model.root, riderModel.group, ghost.bik
 const styleLabel = () => document.querySelectorAll('.styleSel button').forEach(b => b.classList.toggle('on', b.dataset.s === GFX.style));
 document.querySelectorAll('.styleSel button').forEach(b => b.onclick = () => { if (b.dataset.s === GFX.style) return; setStyle(b.dataset.s); buildModels(); restyle(); styleLabel(); });
 restyle(); styleLabel();
+// physics telemetry panels (fork/shock travel, lean, gear, graph): off by default, toggled in the pause menu
+let showTele = false; try { showTele = localStorage.getItem('dailymtb.tele') === '1'; } catch {}
+const teleApply = () => { $('stats').hidden = $('telemetry').hidden = !showTele; $('teleBtn').classList.toggle('on', showTele); $('teleBtn').querySelector('b').textContent = showTele ? 'ON' : 'OFF'; };
+$('teleBtn').onclick = () => { showTele = !showTele; try { localStorage.setItem('dailymtb.tele', showTele ? '1' : '0'); } catch {} teleApply(); }; teleApply();
 const muteLabel = () => { $('muteBtn').innerHTML = `<span>${snd.muted ? 'Unmute' : 'Mute'}</span>`; }; muteLabel();
 $('muteBtn').onclick = () => { snd.setMuted(!snd.muted); muteLabel(); };
 // every new track comes from the Extreme track generator (no generator choice for the player)
@@ -132,7 +136,7 @@ function load(b) {
     cps.forEach((cs) => w.root.add(flags(track, cs)));
     L = { track, sys, bike: sys.bike, rider: sys.rider, rig: new CameraRig(cam, track), world: w.root, sun: w.sun, clearView: w.clearView, cps, cp: 0, section: 0, hist: [], visLean: 0, runT: 0, started: false, done: false, si: 0, extreme, rec: [], recT: 0, best: null };
     const names = track.sections.slice(0, 9);
-    $('sections').innerHTML = names.map((s, i) => `<li><kbd>${i + 1}</kbd> ${s.name}</li>`).join('');
+    $('sections').innerHTML = names.map((s) => `<li>${s.name}</li>`).join('');
     $('helpTitle').textContent = `${b} · ${(track.total / 1000).toFixed(2)} km`;
     $('trackname').textContent = `${extreme ? 'EXTREME ' : ''}${b.toUpperCase()} · ${(track.total / 1000).toFixed(2)} km · seed ${track.seed}`;
     window.__dbg = { snd, renderer, scene, cam, bike: sys.bike, sys, track, get L() { return L; } };
@@ -149,7 +153,6 @@ input.on('Delete', () => L && restartRun()); input.on('Backspace', () => L && re
 input.on('KeyT', () => L && restartRun());
 input.on('KeyC', () => L && L.rig.next());
 input.on('KeyP', () => { if (mode === 'ride') setPause(!paused); });
-input.handlers.digit = (n) => { if (L && n <= Math.min(9, L.track.sections.length)) { spawn(n - 1); L.started = false; } };
 
 // distance along the trail (windowed search around the last known sample)
 function trailS() {
@@ -190,7 +193,8 @@ function frame(now) {
         $('finishTime').textContent = fmt(L.runT); $('finishInfo').textContent = (prev ? (pb ? `NEW BEST −${(prev.t - L.runT).toFixed(2)}s · ` : `+${(L.runT - prev.t).toFixed(2)}s vs best ${fmt(prev.t)} · `) : '') + `${L.extreme ? 'extreme ' : ''}${track.biome} · ${(track.total / 1000).toFixed(2)} km`; mode = 'finished'; $('finish').hidden = false; }
       $('clock').textContent = fmt(L.runT); $('prog').style.width = `${clamp(s / track.total * 100, 0, 100).toFixed(1)}%`;
     }
-    hud(); drawGraph();
+    $('speed').textContent = `${(Math.max(0, bike.speed) * 3.6).toFixed(0)} km/h`;
+    if (showTele) { hud(); drawGraph(); }
   }
   if (L && mode === 'replay') { replayFrame(dt); renderer.render(scene, cam); }
   else if (L) {
