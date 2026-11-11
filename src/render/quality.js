@@ -22,3 +22,16 @@ export function applySun(sun) {
   if (!sun) return; sun.castShadow = Q.shadows;
   if (sun.shadow.mapSize.x !== Q.shadowMap) { sun.shadow.mapSize.set(Q.shadowMap, Q.shadowMap); if (sun.shadow.map) { sun.shadow.map.dispose(); sun.shadow.map = null; } }
 }
+
+// ---- visual style: 'real' (textured, detailed) or 'lowpoly' (flat-shaded facets, simple geometry, no
+// textures). Independent of the quality preset, which still controls resolution/shadows/distances.
+const SKEY = 'dailymtb.style';
+try { Q.style = localStorage.getItem(SKEY) === 'lowpoly' ? 'lowpoly' : 'real'; } catch { Q.style = 'real'; }
+export function setStyle(st) { Q.style = st === 'lowpoly' ? 'lowpoly' : 'real'; try { localStorage.setItem(SKEY, Q.style); } catch {} }
+// restyle already-built models (bike, rider, ghost): faceted shading, bump/texture detail off in low poly
+export function styleModel(root) {
+  const lp = Q.style === 'lowpoly';
+  root.traverse((o) => { if (!o.material) return; for (const m of [].concat(o.material)) {
+    const u = m.userData; if (!('bump' in u)) { u.bump = m.bumpMap || null; }
+    m.flatShading = lp; m.bumpMap = lp ? null : u.bump; m.needsUpdate = true; } });
+}

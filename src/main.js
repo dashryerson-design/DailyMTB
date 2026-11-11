@@ -7,7 +7,7 @@ import { RiderModel } from './render/riderModel.js';
 import { buildWorld, envMap } from './render/world.js';
 import { CameraRig, CAM_MODES } from './render/camera.js';
 import { Sound } from './game/sound.js';
-import { Q as GFX, setQuality, applyRenderer, applySun } from './render/quality.js';
+import { Q as GFX, setQuality, applyRenderer, applySun, setStyle, styleModel } from './render/quality.js';
 import { Dust } from './render/dust.js';
 import { Input } from './game/input.js';
 const T = window.THREE;
@@ -100,6 +100,11 @@ for (const [k, id] of Object.entries({ master: 'volMaster', bike: 'volBike', amb
 const qualLabel = () => document.querySelectorAll('.qualSel button').forEach(b => b.classList.toggle('on', b.dataset.q === GFX.level));
 document.querySelectorAll('.qualSel button').forEach(b => b.onclick = () => { setQuality(b.dataset.q); applyRenderer(renderer); resize(); if (L) applySun(L.sun); qualLabel(); });
 qualLabel();
+// visual style: REAL or LOW POLY (models restyle now; the world uses it from the next track)
+const restyle = () => { for (const o of [model.root, riderModel.group, ghost.bike.root, ghost.rider.group]) styleModel(o); };
+const styleLabel = () => document.querySelectorAll('.styleSel button').forEach(b => b.classList.toggle('on', b.dataset.s === GFX.style));
+document.querySelectorAll('.styleSel button').forEach(b => b.onclick = () => { setStyle(b.dataset.s); restyle(); styleLabel(); });
+restyle(); styleLabel();
 const muteLabel = () => { $('muteBtn').innerHTML = `<span>${snd.muted ? 'Unmute' : 'Mute'}</span>`; }; muteLabel();
 $('muteBtn').onclick = () => { snd.setMuted(!snd.muted); muteLabel(); };
 // every new track comes from the Extreme track generator (no generator choice for the player)
