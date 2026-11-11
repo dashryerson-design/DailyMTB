@@ -15,7 +15,7 @@ const T = window.THREE;
 
 const $ = (id) => document.getElementById(id);
 const DT = 1 / 1000;
-const show = (id) => ['mainMenu', 'biomeMenu', 'finish', 'loading', 'hud'].forEach(k => $(k).hidden = k !== id && !(id === 'finish' && k === 'hud'));
+const show = (id) => ['mainMenu', 'biomeMenu', 'helpMenu', 'finish', 'loading', 'hud'].forEach(k => $(k).hidden = k !== id && !(id === 'finish' && k === 'hud'));
 const fmt = (t) => `${Math.floor(t / 60)}:${(t % 60).toFixed(1).padStart(4, '0')}`;
 
 // ---- renderer + persistent scene objects
@@ -54,6 +54,8 @@ function setPause(v) { paused = !!v && mode === 'ride'; $('pauseMenu').hidden = 
 // ---- menus
 $('playBtn').onclick = () => show('biomeMenu');
 $('backBtn').onclick = () => show('mainMenu');
+$('helpBtn').onclick = () => show('helpMenu');
+$('helpBack').onclick = () => show('mainMenu');
 document.querySelectorAll('.card').forEach(c => c.onclick = () => {
   document.querySelectorAll('.card').forEach(o => o.classList.toggle('sel', o === c));
   biome = c.dataset.biome; $('genBtn').disabled = false;

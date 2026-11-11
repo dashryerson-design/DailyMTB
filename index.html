@@ -113,6 +113,13 @@ kbd { font: 500 10.5px var(--mono); background: rgba(255,255,255,0.08); border: 
 .tgl b { grid-row: 1 / 3; grid-column: 2; min-width: 54px; height: 28px; display: grid; place-items: center; font: 700 12px var(--display); letter-spacing: 0.16em; box-shadow: inset 0 0 0 1px var(--line2); color: var(--dim); transition: var(--t); }
 .tgl.on b { background: var(--accent); color: #fff; box-shadow: none; }
 #progress .spd { font: 600 13px var(--mono); color: var(--dim); letter-spacing: 0.12em; }
+.forces { display: grid; grid-template-columns: repeat(3, minmax(0, 300px)); gap: 10px; }
+.force { padding: 14px 16px; background: rgba(20,26,31,0.8); box-shadow: inset 0 0 0 1px var(--line); border-left: 2px solid var(--accent); }
+.force b { display: block; font: 700 17px var(--display); letter-spacing: 0.12em; text-transform: uppercase; margin-bottom: 6px; }
+.force p { margin: 0; font-size: 12.5px; line-height: 1.5; color: #c3cdd5; }
+#helpMenu .keys { font: 500 11.5px var(--mono); color: var(--dim); letter-spacing: 0.04em; }
+@media (max-width: 960px) { .forces { grid-template-columns: repeat(2, minmax(0, 1fr)); width: 100%; } }
+@media (max-width: 600px) { .forces { grid-template-columns: 1fr; } }
 .mix .hint { color: var(--faint); font: 500 10.5px var(--mono); letter-spacing: 0.04em; line-height: 1.5; }
 input[type=range] { -webkit-appearance: none; appearance: none; width: 100%; height: 3px; background: linear-gradient(90deg, var(--accent), var(--accent)) 0/var(--p, 100%) 100% no-repeat, rgba(255,255,255,0.12); border-radius: 2px; outline: none; }
 input[type=range]::-webkit-slider-thumb { -webkit-appearance: none; width: 14px; height: 14px; background: #fff; border-radius: 1px; transform: rotate(45deg); box-shadow: 0 0 0 3px rgba(46,168,255,0.35); cursor: pointer; }
@@ -185,8 +192,15 @@ input[type=range]::-moz-range-thumb { width: 12px; height: 12px; background: #ff
     <div class="tag">Downhill · A new trail every ride</div>
   </div>
   <button class="btn hero" id="playBtn"><span>Play</span></button>
+  <button class="btn ghost" id="helpBtn"><span>Help · How it works</span></button>
   <div class="menuQual"><span>Style</span><div class="seg styleSel" style="grid-template-columns: repeat(2, 1fr)"><button data-s="real">Real</button><button data-s="lowpoly">Low poly</button></div><span>Graphics</span><div class="seg qualSel"><button data-q="low">Low</button><button data-q="medium">Medium</button><button data-q="high">High</button></div></div>
   <div class="menuFoot">EXTREME TRACK GENERATOR · SNOW · DESERT · FOREST</div>
+</div>
+<div id="helpMenu" class="screen" hidden>
+  <h2><span class="eyebrow">How it works</span><br>The forces of DailyMTB<small>Everything you feel on the bike comes from real physics</small></h2>
+  <div class="forces"><div class="force"><b>Gravity</b><p>The only thing that really moves you downhill. Steeper trail = more speed; every jump and drop is just you falling along a curve.</p></div><div class="force"><b>Pedalling</b><p><kbd>W</kbd> drives the rear wheel through the chain and gears. Strong at low speed, it fades as cadence tops out — gravity does the rest.</p></div><div class="force"><b>Tyre grip</b><p>Each tyre has a contact patch that pushes back on the ground. Grip depends on load and surface: dirt and packed snow grip, ice and sand slide. Ask for too much and the tyre slips.</p></div><div class="force"><b>Rolling resistance &amp; air drag</b><p>Soft surfaces (sand, snow) and bumps sap speed; air drag grows with the square of speed and sets your top speed.</p></div><div class="force"><b>Braking</b><p><kbd>S</kbd> rear, <kbd>Space</kbd> front. The front brake stops hardest but loads the fork and can pitch you over; the rear can lock and skid.</p></div><div class="force"><b>Suspension</b><p>Fork and rear shock are springs with damping. They soak up bumps and landings, compress under braking and pedalling, then spring back.</p></div><div class="force"><b>Lean &amp; balance</b><p>Bikes turn by leaning. <kbd>A</kbd>/<kbd>D</kbd> steer and the bike leans into the corner so gravity balances the cornering force. <kbd>←</kbd>/<kbd>→</kbd> add extra lean.</p></div><div class="force"><b>Berms</b><p>A banked corner pushes back into the turn, so you can carry far more speed. Steer + lean the same way to carve hard.</p></div><div class="force"><b>Weight shift</b><p><kbd>↑</kbd>/<kbd>↓</kbd> move your body forward/back: changes how load splits between the wheels and pitches the bike in the air.</p></div><div class="force"><b>Pop</b><p>Lean back (<kbd>↓</kbd>) just before a lip to load the rear and spring off it — more height, more distance.</p></div><div class="force"><b>Air control</b><p>In the air <kbd>←</kbd>/<kbd>→</kbd> whip the bike sideways and <kbd>↑</kbd>/<kbd>↓</kbd> pitch it. Straighten out before you touch down.</p></div><div class="force"><b>Landings</b><p>Land with both wheels together and the bike square to the slope for a clean landing and a small speed boost. Big hits compress the suspension hard; land badly and you crash.</p></div></div>
+  <div class="keys">Also: <kbd>R</kbd> last checkpoint · <kbd>Del</kbd> restart · <kbd>C</kbd> camera · <kbd>P</kbd>/<kbd>Esc</kbd> pause</div>
+  <div class="row2"><button class="btn" id="helpBack"><span>Got it</span></button></div>
 </div>
 <div id="biomeMenu" class="screen" hidden>
   <h2><span class="eyebrow">Select terrain</span><br>Choose your mountain<small>Every run is a fresh 0.3–0.9 km downhill from the Extreme track generator</small></h2>

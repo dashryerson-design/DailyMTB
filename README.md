@@ -1,32 +1,57 @@
+<div align="center">
+
 # DailyMTB
 
-A hyper-realistic mountain biking game that runs in the browser, with a new procedurally generated trail every day.
+**Downhill mountain biking in your browser.** A brand-new trail is generated every ride: massive jumps, big drops, steep chutes and berms, across Snow, Desert and Forest.
 
-## Vision
-- **Physics-first realism**: a rigid-body bike with front and rear suspension, a tire grip model that depends on surface, a rider whose weight shifts (pumping, preloading, leaning into berms), and independent front and rear brakes.
-- **Real dirt**: hardpack, loam, loose gravel, roots, wet rock and mud, each with its own grip and sound.
-- **Daily trail**: a date-based seed generates the same mountain for every player that day, with a daily leaderboard and ghost replays.
-- **Trail-builder generation**: trails follow the fall line, features are placed so they flow, and every line is rideable.
+<br>
 
-## Planned stack
-- Rendering: Three.js (WebGL/WebGPU)
-- Physics: Rapier (WASM) with a custom tire and suspension model
-- Build: Vite + TypeScript
+<a href="https://dashryerson-design.github.io/DailyMTB/"><img src="https://img.shields.io/badge/%E2%96%B6%20%20PLAY%20NOW-2ea8ff?style=for-the-badge&labelColor=0b6fd1" alt="Play now" height="64"></a>
 
-## Layout
-- `src/physics`: bike, rider and tire/suspension simulation
-- `src/trailgen`: seeded daily trail and terrain generation
-- `src/render`: scene, materials, cameras, effects
-- `src/game`: timing, input, replays, leaderboard client
+<sub>Runs in any modern browser — desktop, tablet or phone. No install.</sub>
 
-## Roadmap
-1. **Feel prototype**: grey hillside, one bike, physics tuned until it feels great
-2. **Trail generator v1**: daily seed, spline trail, carved terrain, basic features
-3. **Looks and sound**: forest, materials, lighting, audio
-4. **Game layer**: timing, ghosts, daily leaderboard backend
-5. **Depth**: bike setup tuning, weather, more features, gamepad/mobile
+</div>
 
-## Open design decisions
-- Controls: keyboard, gamepad, or both
-- Sim vs. forgiving realism
-- Downhill only, or enduro/climbing too
+---
+
+## Controls
+
+| Key | Action |
+|---|---|
+| <kbd>W</kbd> | Pedal |
+| <kbd>S</kbd> | Rear brake |
+| <kbd>Space</kbd> | Front brake |
+| <kbd>A</kbd> / <kbd>D</kbd> | Steer (the bike leans into the turn) |
+| <kbd>←</kbd> / <kbd>→</kbd> | Extra lean · whip the bike in the air |
+| <kbd>↑</kbd> / <kbd>↓</kbd> | Shift weight forward / back · pitch in the air |
+| <kbd>↓</kbd> before a lip | Pop off the jump for more height |
+| <kbd>R</kbd> | Back to last checkpoint |
+| <kbd>Del</kbd> | Restart run |
+| <kbd>C</kbd> | Change camera |
+| <kbd>P</kbd> / <kbd>Esc</kbd> | Pause · settings |
+
+**Tips:** steer and lean the same way to carve berms · land on both wheels with the bike square to the slope for a speed boost · press **Help** on the main menu for how every force in the game works.
+
+## Features
+
+- **Real bike physics** — 1 kHz simulation of the frame, fork and linkage rear suspension, tyre grip per surface, braking, lean-to-turn balance and aerodynamic drag.
+- **Extreme track generator** — every track is new: designed tabletops and step-downs, drops, chutes, berms, rock gardens, checkpoints.
+- **Three biomes** — Snow, Desert, Forest.
+- **Two visual styles** — *Real* or a cel-shaded *Low poly* cartoon look, each with Low / Medium / High graphics.
+- **Race your ghost**, watch a **cinematic replay**, full sound.
+
+## Run locally
+
+```bash
+python3 -m http.server 8000
+```
+
+Then open http://localhost:8000. No build step.
+
+## Development
+
+- `src/physics` — bike, suspension, rider ragdoll, assists
+- `src/terrain` — Extreme track generator and terrain
+- `src/render` — world, flora, bike/rider models, quality presets
+- `src/game` — input, procedural rider pose, sound
+- Tests: `node tests/ride.mjs [seed]` (scripted rider on generated tracks), `node tests/sim.mjs` (physics test track)
