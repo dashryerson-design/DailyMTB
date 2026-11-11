@@ -101,8 +101,12 @@ export function buildWorld(scene0, track) {
       const rut = 1 - (LP ? 0.07 : track.biome === 'snow' ? 0.24 : 0.16) * Math.exp(-(((td - 0.32) / 0.11) ** 2)) * (0.7 + 0.3 * m2), grain = LP ? 0.97 + 0.06 * m : 0.88 + 0.2 * m2 + 0.06 * m;   // cartoon: clean, even trail colour
       const trailC = tb.map((v) => v * rut * grain * (1 + 0.06 * Math.exp(-((td / 0.18) ** 2))));
       let c = offC.map((v, q) => v + (trailC[q] - v) * mask);
+      if (LP) {   // cartoon: solid flat colours - one even trail colour, a crisp darker rim, plain ground; no grain or smudge
+        const gnd = offLike ? base.map((v) => v * (0.96 + 0.08 * m)) : base, tr = tb, rim = tb.map((v) => v * 0.72), e = TW + 0.06 * jit;
+        c = td < e ? tr : td < e + 0.32 ? rim : gnd;
+      }
       const band = Math.exp(-(((td - (TW + 0.3 + jit)) / 0.32) ** 2)) * (LP ? 0.55 : 0.45 + 0.4 * m2);
-      if (offLike || s === SURF.DIRT) c = c.map((v, q) => v + (P.edge[q] - v) * band * 0.65);
+      if (!LP && (offLike || s === SURF.DIRT)) c = c.map((v, q) => v + (P.edge[q] - v) * band * 0.65);
       col[k * 3] = c[0] ** 2.2; col[k * 3 + 1] = c[1] ** 2.2; col[k * 3 + 2] = c[2] ** 2.2;
     }
     for (let j = 0; j < N - 1; j++) for (let i = 0; i < N - 1; i++) { const a = i + j * N, b = a + 1, c = a + N, d = c + 1; idx.push(a, c, b, b, c, d); }
