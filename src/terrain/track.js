@@ -62,12 +62,12 @@ export const LAYOUT = [
 
 // ---- biomes: what the generator builds and what the ground is made of
 export const BIOMES = {
-  forest: { trail: SURF.DIRT, off: SURF.GRASS, grade: [0.1, 0.2], relief: 7, ridge: 4, valley: 0.09, roots: 1, rocks: 1, moss: true,
-    w: { descent: 1.4, turn: 3.4, berm: 3.6, bumps: 2.4, rollers: 1.6, jump: 2.6, drop: 1.3, rockslab: 0.6, tech: 1.8 } },
-  snow: { trail: SURF.SNOW, off: SURF.SNOW, grade: [0.11, 0.22], relief: 14, ridge: 12, valley: 0.13, roots: 0, rocks: 0.5, ice: true,
-    w: { descent: 2.2, turn: 3.2, berm: 3.6, bumps: 0.8, rollers: 2, jump: 3, drop: 0.8, rockslab: 0.5, tech: 0.9, ice: 0.4 } },
-  desert: { trail: SURF.DIRT, off: SURF.SAND, grade: [0.1, 0.2], relief: 10, ridge: 8, valley: 0.11, roots: 0, rocks: 1.3, sandstone: true,
-    w: { descent: 2.2, turn: 3, berm: 2.6, bumps: 1.4, rollers: 1.4, jump: 2.8, drop: 2.2, rockslab: 1.6, tech: 1.1, sand: 0.4 } },
+  forest: { trail: SURF.DIRT, off: SURF.GRASS, grade: [0.15, 0.25], relief: 9, ridge: 6, valley: 0.13, roots: 1, rocks: 1, moss: true,
+    w: { descent: 1.8, chute: 1.4, turn: 3.8, berm: 3.8, bumps: 1.1, rollers: 0.9, jump: 3.2, drop: 2.2, rockslab: 0.5, tech: 2 } },
+  snow: { trail: SURF.SNOW, off: SURF.SNOW, grade: [0.15, 0.26], relief: 16, ridge: 14, valley: 0.16, roots: 0, rocks: 0.5, ice: true,
+    w: { descent: 2.4, chute: 1.4, turn: 3.6, berm: 3.8, bumps: 0.5, rollers: 1.1, jump: 3.4, drop: 1.6, rockslab: 0.4, tech: 1.1, ice: 0.3 } },
+  desert: { trail: SURF.DIRT, off: SURF.SAND, grade: [0.15, 0.25], relief: 12, ridge: 10, valley: 0.14, roots: 0, rocks: 1.3, sandstone: true,
+    w: { descent: 2.2, chute: 1.6, turn: 3.4, berm: 3, bumps: 0.8, rollers: 0.8, jump: 3.2, drop: 2.8, rockslab: 1.2, tech: 1.3, sand: 0.3 } },
   test: { trail: SURF.DIRT, off: SURF.GRASS, grade: [0.1, 0.1], relief: 2, ridge: 0, valley: 0.05, roots: 1, rocks: 1, w: {} },
 };
 
@@ -75,7 +75,7 @@ const W = 1.7;        // tread half-width (3.4 m wide trail)
 
 // generate a downhill run: features are the proven shapes below, placed with rideability rules
 export function generateLayout(seed, biome, extreme = false) {
-  const r = rng(seed * 7919 + 13), B = extreme ? { ...BIOMES[biome], w: { jump: 7, drop: 4.5, berm: 2.2, descent: 1.2, turn: 1.2, bumps: 0.4 } } : BIOMES[biome], target = 330 + r() * 520;   // 0.3-0.9 km runs
+  const r = rng(seed * 7919 + 13), B = extreme ? { ...BIOMES[biome], w: { jump: 7, drop: 4.5, berm: 2.6, descent: 1.2, chute: 1, turn: 2, bumps: 0.3 } } : BIOMES[biome], target = 330 + r() * 520;   // 0.3-0.9 km runs
   const out = [{ len: 16, name: 'Start', grade: 0.1 }];
   let heading = 0, s = 30, n = 0, last = '';
   const names = { berm: 'Berm', bumps: biome === 'forest' ? 'Root garden' : 'Rock garden', rollers: 'Rollers', table: 'Tabletop', bigjump: 'Big jump', drop: 'Drop', rockslab: biome === 'desert' ? 'Sandstone slabs' : 'Rock slab', tech: 'Tech turns', ice: 'Ice patch', sand: 'Sand wash' };
@@ -91,29 +91,32 @@ export function generateLayout(seed, biome, extreme = false) {
   const runIn = (v, g) => clamp((v * v - 49) / (2 * 9.81 * (g - 0.035)), 14, 46);
   while (s < target - 30) {
     const k = pick(); last = k; n++;
+    // no long flat-ish runs: anything that isn't itself a turn is followed by a bend
     switch (k) {
       case 'descent': {   // fast, steep, with gentle S-curves
         push({ len: 12 + r() * 10, grade: 0.24 + r() * 0.07, name: 'Fast descent' });
         push({ arc: 28 + r() * 20, ang: turnAng((18 + r() * 20) * D2R), grade: 0.26 + r() * 0.06 });
         push({ arc: 28 + r() * 20, ang: turnAng((18 + r() * 20) * D2R), grade: 0.24 + r() * 0.06 }); break; }
-      case 'turn': { const R = 10 + r() * 10; push({ arc: R, ang: turnAng((45 + r() * 50) * D2R), grade: 0.12 + r() * 0.06 }); push({ len: 3 + r() * 5, grade: 0.18 }); push({ arc: 10 + r() * 9, ang: turnAng((45 + r() * 50) * D2R), grade: 0.12 + r() * 0.06 }); break; }
+      case 'turn': { const R = 9 + r() * 9; push({ arc: R, ang: turnAng((55 + r() * 50) * D2R), grade: 0.16 + r() * 0.08 }); push({ len: 2 + r() * 4, grade: 0.22 }); push({ arc: 9 + r() * 8, ang: turnAng((55 + r() * 50) * D2R), grade: 0.16 + r() * 0.08 }); break; }
+      case 'chute': {    // short, steep plunge that bends at the bottom
+        push({ len: 8 + r() * 8, grade: 0.34 + r() * 0.1, name: 'Steep chute' }); push({ arc: 12 + r() * 8, ang: turnAng((35 + r() * 35) * D2R), grade: 0.2 }); break; }
       case 'berm': {      // big, tall berms: steeper and higher walls on tighter radii
         const R = 7 + r() * 15, bank = clamp(56 - R * 1.2 + r() * 6, 30, 52), wall = 0.4 + r() * 1.1;
-        push({ arc: R, ang: turnAng((80 + r() * 60) * D2R), bank, wall, grade: 0.12, name: bank > 44 ? 'Massive berm' : 'Berm' }); push({ len: 4 + r() * 6, grade: 0.18 }); break; }
-      case 'tech': { push({ arc: 8 + r() * 3, ang: turnAng((50 + r() * 35) * D2R), feat: 'innerRocks', grade: 0.1, name: names.tech }); push({ len: 5 + r() * 5, grade: 0.15 }); push({ arc: 8 + r() * 4, ang: turnAng((45 + r() * 35) * D2R), grade: 0.1 }); break; }
-      case 'bumps': push({ len: 30 + r() * 30, feat: 'bumps', grade: G() + 0.03, name: names.bumps, roots: B.roots, rocks: B.rocks }); break;
+        push({ arc: R, ang: turnAng((80 + r() * 60) * D2R), bank, wall, grade: 0.15, name: bank > 44 ? 'Massive berm' : 'Berm' }); push({ len: 3 + r() * 4, grade: 0.22 }); break; }
+      case 'tech': { push({ arc: 8 + r() * 3, ang: turnAng((50 + r() * 35) * D2R), feat: 'innerRocks', grade: 0.1, name: names.tech }); push({ len: 3 + r() * 4, grade: 0.2 }); push({ arc: 8 + r() * 4, ang: turnAng((45 + r() * 35) * D2R), grade: 0.14 }); break; }
+      case 'bumps': push({ len: 18 + r() * 16, feat: 'bumps', grade: G() + 0.03, name: names.bumps, roots: B.roots, rocks: B.rocks }); break;
       case 'rockslab': push({ len: 14 + r() * 10, feat: 'rockslab', surf: SURF.ROCK, grade: G() + 0.04, name: names.rockslab }); break;
       case 'ice': push({ len: 10 + r() * 6, surf: SURF.ICE, grade: 0.08, name: names.ice }); break;
       case 'sand': push({ len: 12 + r() * 10, surf: SURF.SAND, grade: 0.12, name: names.sand }); break;
       case 'rollers': { const nR = 2 + Math.floor(r() * 5), H = 0.3 + r() * 0.5, sp = 5 + r() * 3;
-        push({ len: 10 + r() * 8, grade: 0.16 }); push({ len: 4 + nR * sp, feat: 'rollersP', nR, H, sp, grade: 0.14, name: nR > 4 ? 'Pump track' : 'Rollers' }); push({ len: 8 + r() * 6, grade: 0.14 }); break; }
+        push({ len: 6 + r() * 5, grade: 0.2 }); push({ len: 4 + nR * sp, feat: 'rollersP', nR, H, sp, grade: 0.14, name: nR > 4 ? 'Pump track' : 'Rollers' }); push({ arc: 14 + r() * 8, ang: turnAng((40 + r() * 40) * D2R), grade: 0.18 }); break; }
       case 'drop': { const dh = extreme ? 1.6 + r() * 1.6 : 0.6 + r() * 1.2; push({ len: 12 + r() * 8, grade: 0.16 });
-        push({ len: 20, feat: 'dropP', dropH: dh, dropAt: 8, grade: 0.12, name: dh > 2.2 ? 'MEGA drop' : dh > 1.3 ? 'Big drop' : 'Drop' }); push({ len: 14 + r() * 6, grade: 0.14 }); break; }
+        push({ len: 20, feat: 'dropP', dropH: dh, dropAt: 8, grade: 0.12, name: dh > 2.2 ? 'MEGA drop' : dh > 1.3 ? 'Big drop' : 'Drop' }); push({ len: 6 + r() * 4, grade: 0.18 }); push({ arc: 14 + r() * 8, ang: turnAng((35 + r() * 40) * D2R), grade: 0.18 }); break; }
       case 'jump': {      // a jump designed for a speed: kicker angle/height, flight, deck and landing all follow from it
         const big = extreme || r() < 0.4, mega = extreme && r() < 0.6, v = mega ? 13.5 + r() * 2 : big ? 11 + r() * 2.5 : 8.5 + r() * 2.5, th = (mega ? 25 : big ? 22 : 18 + r() * 8) * D2R, Hk = mega ? 2.3 + r() * 0.9 : big ? 1.4 + r() * 0.9 : 0.7 + r() * 0.7, g = 0.2 + r() * 0.04;
         const J = designJump(v, th, Hk, 0.12, r() < 0.5);
         push({ len: runIn(v, g), grade: g }); push({ ...J, v, feat: 'kicker', grade: 0.12, name: mega ? (J.table ? 'MEGA tabletop' : 'MEGA step-down') : big ? (J.table ? 'Huge tabletop' : 'Huge step-down') : (J.table ? 'Tabletop' : 'Step-down') });
-        push({ len: 12 + r() * 8, grade: 0.13 }); break; }
+        push({ len: 8 + r() * 5, grade: 0.16 }); push({ arc: 15 + r() * 8, ang: turnAng((30 + r() * 40) * D2R), grade: 0.18 }); break; }
     }
   }
   push({ len: 28, name: 'Finish', grade: 0.1, finish: true });
